@@ -1,0 +1,21 @@
+[Unit]
+Description=DevOps Operations Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/dev-ops-dashboard
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+ExecStartPre=-/usr/bin/docker rm -f dev-ops-dashboard
+ExecStart=/usr/bin/docker run --rm --name dev-ops-dashboard --network host --user 1000:1000 --env-file /home/ubuntu/dev-ops-dashboard/.env -e NODE_ENV=production -e NEXT_TELEMETRY_DISABLED=1 -e NODE_OPTIONS=--max-old-space-size=512 -v /home/ubuntu/dev-ops-dashboard:/app -w /app node:20-bookworm-slim node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3005
+ExecStop=/usr/bin/docker stop --time 20 dev-ops-dashboard
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target
