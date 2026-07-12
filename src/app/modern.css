@@ -301,6 +301,7 @@ i.online,
 
 .nav-group button b {
   min-width: 20px;
+  border: 1px solid var(--line-strong);
   border-radius: 6px;
   padding: 2px 5px;
   background: var(--danger-soft);
