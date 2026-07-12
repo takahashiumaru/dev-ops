@@ -7,12 +7,11 @@ export const dynamic = "force-dynamic";
 
 type CountRow = RowDataPacket & {
   users_count: number;
-  database_name: string;
 };
 
 const getCachedHealth = unstable_cache(
   async () => queryRows<CountRow>(
-    "SELECT COUNT(*) AS users_count, DATABASE() AS database_name FROM users WHERE deleted_at IS NULL",
+    "SELECT COUNT(*) AS users_count FROM users WHERE deleted_at IS NULL",
   ),
   ["opsdeck-health"],
   { revalidate: 60, tags: ["opsdeck-health"] },
@@ -28,15 +27,14 @@ export async function GET() {
       ok: true,
       database: {
         connected: true,
-        name: rows[0]?.database_name ?? null,
         usersTable: true,
-        usersCount: Number(rows[0]?.users_count ?? 0),
+        seeded: Number(rows[0]?.users_count ?? 0) > 0,
       },
       latencyMs: Date.now() - startedAt,
       checkedAt: new Date().toISOString(),
       cache: "60s",
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       {
         ok: false,
@@ -44,7 +42,7 @@ export async function GET() {
           connected: false,
           usersTable: false,
         },
-        error: error instanceof Error ? error.message : "Unknown database error",
+        error: "Health dependency unavailable",
         latencyMs: Date.now() - startedAt,
         checkedAt: new Date().toISOString(),
         cache: "miss",

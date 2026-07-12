@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth";
 import type { RowDataPacket } from "mysql2";
 import { unstable_cache } from "next/cache";
 import { queryRows } from "@/lib/db";
@@ -28,6 +29,16 @@ const getCachedUsers = unstable_cache(
 );
 
 export async function GET() {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!["owner", "admin"].includes(user.role)) {
+    return NextResponse.json(
+      { error: "Insufficient permission" },
+      { status: 403 },
+    );
+  }
   try {
     const users = await getCachedUsers();
 

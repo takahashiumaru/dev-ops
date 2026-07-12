@@ -23,15 +23,22 @@ jobs:
       - name: Build application
         run: npm run build
 
-      - name: Copy files to VPS
+      - name: Package immutable release
+        shell: bash
+        run: |
+          files=(.next package.json package-lock.json next.config.ts tsconfig.json src database scripts deploy)
+          if [ -d public ]; then files+=(public); fi
+          tar -czf opsdeck-release.tgz "${files[@]}"
+
+      - name: Upload release to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
-          source: ".next,public,package.json,package-lock.json,next.config.ts,tsconfig.json,src,database,scripts"
-          target: "/home/ubuntu/dev-ops-dashboard"
+          source: "opsdeck-release.tgz"
+          target: "/home/ubuntu/dev-ops-dashboard/incoming/${{ github.sha }}"
 
       - name: Post Deployment Tasks via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -41,7 +48,63 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           script: |
-            cd /home/ubuntu/dev-ops-dashboard
-            npm install
-            npm run db:migrate
-            systemctl --user restart opsdeck.service
+            set -Eeuo pipefail
+            ROOT=/home/ubuntu/dev-ops-dashboard
+            RELEASE="$ROOT/releases/${{ github.sha }}"
+            UPLOAD="$ROOT/incoming/${{ github.sha }}/opsdeck-release.tgz"
+            PREVIOUS="$(readlink -f "$ROOT/current" 2>/dev/null || true)"
+            LEGACY_UNIT="$ROOT/deploy-backups/dev-ops-dashboard.service.before-current"
+            if [ ! -d "$PREVIOUS" ]; then PREVIOUS=""; fi
+
+            mkdir -p "$RELEASE"
+            tar -xzf "$UPLOAD" -C "$RELEASE"
+
+            sudo docker run --rm --network host --user 1000:1000 \
+              --env-file "$ROOT/.env" -e npm_config_cache=/tmp/npm-cache \
+              -v "$RELEASE:/app" -w /app node:20-bookworm-slim npm ci --omit=dev
+            sudo docker run --rm --network host --user 1000:1000 \
+              --env-file "$ROOT/.env" -e npm_config_cache=/tmp/npm-cache \
+              -v "$RELEASE:/app" -w /app node:20-bookworm-slim npm run db:migrate
+            if [ -z "$PREVIOUS" ] && sudo test -f /etc/systemd/system/dev-ops-dashboard.service; then
+              sudo mkdir -p "$ROOT/deploy-backups"
+              sudo cp /etc/systemd/system/dev-ops-dashboard.service "$LEGACY_UNIT"
+            fi
+            sudo install -o root -g root -m 0644 \
+              "$RELEASE/deploy/dev-ops-dashboard.service" \
+              /etc/systemd/system/dev-ops-dashboard.service
+            sudo systemctl daemon-reload
+            systemctl --user disable --now opsdeck.service || true
+
+            ln -sfn "$RELEASE" "$ROOT/current.next"
+            mv -Tf "$ROOT/current.next" "$ROOT/current"
+            sudo systemctl restart dev-ops-dashboard.service
+
+            healthy=0
+            for attempt in $(seq 1 30); do
+              if sudo systemctl is-active --quiet dev-ops-dashboard.service && \
+                 curl -fsS --max-time 3 http://127.0.0.1:3005/api/health >/dev/null && \
+                 curl -fsS --max-time 5 https://dev-ops.takahashiumaru.my.id/api/health >/dev/null; then
+                healthy=1
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "$healthy" -ne 1 ]; then
+              sudo journalctl -u dev-ops-dashboard.service -n 80 --no-pager || true
+              if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
+                ln -sfn "$PREVIOUS" "$ROOT/current.next"
+                mv -Tf "$ROOT/current.next" "$ROOT/current"
+                sudo systemctl restart dev-ops-dashboard.service
+              elif sudo test -f "$LEGACY_UNIT"; then
+                sudo cp "$LEGACY_UNIT" /etc/systemd/system/dev-ops-dashboard.service
+                sudo rm -f "$ROOT/current"
+                sudo systemctl daemon-reload
+                sudo systemctl restart dev-ops-dashboard.service
+              fi
+              exit 1
+            fi
+
+            rm -rf "$ROOT/incoming/${{ github.sha }}"
+            find "$ROOT/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+              | sort -nr | tail -n +6 | cut -d' ' -f2- | xargs -r rm -rf

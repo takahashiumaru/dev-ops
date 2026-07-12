@@ -32,6 +32,18 @@ const sharedNginxError = {
 };
 
 export const projectLogRegistry: Record<string, ProjectLogTarget> = {
+  opsdeck: {
+    label: "Opsdeck",
+    domain: "dev-ops.takahashiumaru.my.id",
+    streams: {
+      app: {
+        label: "Application journal",
+        command: systemJournal("dev-ops-dashboard.service"),
+      },
+      access: sharedNginxAccess,
+      error: sharedNginxError,
+    },
+  },
   fintrack: {
     label: "Taka FinTrack",
     domain: "takahashiumaru.my.id",

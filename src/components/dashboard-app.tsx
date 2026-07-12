@@ -5,11 +5,13 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
 import {
   ArrowClockwise,
+  ArrowSquareOut,
   Bell,
   CheckCircle,
   ClockCounterClockwise,
@@ -29,17 +31,24 @@ import {
   ListMagnifyingGlass,
   MagnifyingGlass,
   Memory,
+  Moon,
+  Play,
+  Power,
   Pulse,
   RocketLaunch,
   SignOut,
   SquaresFour,
   Stack,
+  Stop,
+  Sun,
   TerminalWindow,
   Warning,
+  X,
   XCircle,
 } from "@phosphor-icons/react";
 import {
   alerts,
+  deliveryWorkflowRepositories,
   deployments,
   navGroups,
   pageMeta,
@@ -48,7 +57,14 @@ import {
   type ModuleName,
 } from "@/lib/dashboard-data";
 
-export type SessionUser = { id: number; name: string; email: string; role: string; status: string };
+export type SessionUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: "owner" | "admin" | "operator" | "viewer";
+  status: string;
+  actionToken: string;
+};
 type Project = {
   id: string;
   name: string;
@@ -74,6 +90,7 @@ type Repository = {
 };
 type WorkflowRun = {
   id: number;
+  github_id: number;
   full_name: string;
   workflow_name: string;
   event_name: string;
@@ -86,6 +103,18 @@ type WorkflowRun = {
   html_url: string;
   started_at: string;
   completed_at: string | null;
+};
+type AuditEntry = {
+  id: number;
+  user_name: string;
+  user_role: string;
+  action_name: string;
+  target_type: string;
+  target_name: string;
+  status: "running" | "scheduled" | "success" | "failed";
+  message: string | null;
+  started_at: string;
+  finished_at: string | null;
 };
 type Sync = {
   status: string;
@@ -120,8 +149,21 @@ type DashboardData = {
     load_1m: number | null;
     captured_at: string;
   }>;
+  auditLog: AuditEntry[];
   source: string;
   fetchedAt: string;
+};
+
+type OperationRequest = {
+  endpoint: "/api/operations/action" | "/api/github/runs/rerun";
+  title: string;
+  description: string;
+  target: string;
+  action: string;
+  body: Record<string, unknown>;
+  confirmationText?: string;
+  buttonLabel?: string;
+  danger?: boolean;
 };
 type LiveData = {
   hostname: string;
@@ -246,6 +288,171 @@ function EmptyState({
   );
 }
 
+function OperationDialog({
+  operation,
+  busy,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  operation: OperationRequest | null;
+  busy: boolean;
+  error: string;
+  onCancel: () => void;
+  onConfirm: (confirmation: string) => void;
+}) {
+  const [confirmation, setConfirmation] = useState("");
+  const confirmButton = useRef<HTMLButtonElement>(null);
+  const confirmationInput = useRef<HTMLInputElement>(null);
+  const dialog = useRef<HTMLElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+  const busyRef = useRef(busy);
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  useEffect(() => {
+    setConfirmation("");
+    if (!operation) return;
+    previousFocus.current = document.activeElement as HTMLElement | null;
+    const timeout = window.setTimeout(() => {
+      if (operation.confirmationText) confirmationInput.current?.focus();
+      else confirmButton.current?.focus();
+    }, 20);
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape" && !busyRef.current) onCancel();
+      if (event.key !== "Tab" || !dialog.current) return;
+      const focusable = Array.from(
+        dialog.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.clearTimeout(timeout);
+      document.removeEventListener("keydown", closeOnEscape);
+      previousFocus.current?.focus();
+    };
+  }, [operation, onCancel]);
+
+  if (!operation) return null;
+  const confirmationMatches = operation.confirmationText
+    ? confirmation === operation.confirmationText
+    : true;
+
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <section
+        ref={dialog}
+        className="operation-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="operation-dialog-title"
+        aria-describedby="operation-dialog-description"
+      >
+        <header>
+          <span className={operation.danger ? "dialog-icon danger" : "dialog-icon"}>
+            {operation.danger ? <Warning /> : <ArrowClockwise />}
+          </span>
+          <div>
+            <span className="dialog-kicker">Konfirmasi tindakan</span>
+            <h2 id="operation-dialog-title">{operation.title}</h2>
+          </div>
+          <button
+            className="icon-button"
+            onClick={onCancel}
+            disabled={busy}
+            aria-label="Tutup dialog"
+          >
+            <X />
+          </button>
+        </header>
+        <p id="operation-dialog-description">{operation.description}</p>
+        <dl className="operation-summary">
+          <div>
+            <dt>Target</dt>
+            <dd>{operation.target}</dd>
+          </div>
+          <div>
+            <dt>Action</dt>
+            <dd>{operation.action}</dd>
+          </div>
+          <div>
+            <dt>Audit</dt>
+            <dd>Nama operator, target, hasil, dan waktu akan disimpan.</dd>
+          </div>
+        </dl>
+        {operation.confirmationText ? (
+          <label className="confirmation-field">
+            Ketik <strong>{operation.confirmationText}</strong> untuk melanjutkan
+            <input
+              ref={confirmationInput}
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              autoComplete="off"
+              disabled={busy}
+            />
+          </label>
+        ) : null}
+        {error ? (
+          <p className="dialog-error" role="alert">
+            <Warning /> {error}
+          </p>
+        ) : null}
+        <footer>
+          <button className="quiet-button" onClick={onCancel} disabled={busy}>
+            Batal
+          </button>
+          <button
+            ref={confirmButton}
+            className={operation.danger ? "danger-button" : "primary-button"}
+            onClick={() => onConfirm(confirmation)}
+            disabled={busy || !confirmationMatches}
+          >
+            <ArrowClockwise className={busy ? "spin" : ""} />
+            {busy ? "Menjalankan..." : operation.buttonLabel || "Jalankan"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function OperationNotice({
+  notice,
+  onClose,
+}: {
+  notice: { tone: "success" | "danger"; message: string; auditId?: number } | null;
+  onClose: () => void;
+}) {
+  if (!notice) return null;
+  return (
+    <div className={`operation-notice ${notice.tone}`} role="status" aria-live="polite">
+      {notice.tone === "success" ? <CheckCircle /> : <XCircle />}
+      <div>
+        <strong>{notice.tone === "success" ? "Action accepted" : "Action failed"}</strong>
+        <span>{notice.message}</span>
+        {notice.auditId ? <small>Audit #{notice.auditId}</small> : null}
+      </div>
+      <button onClick={onClose} aria-label="Tutup notifikasi">
+        <X />
+      </button>
+    </div>
+  );
+}
+
 function OverviewPage({
   data,
   live,
@@ -324,7 +531,7 @@ function OverviewPage({
               <ResourceBar
                 label="CPU"
                 value={live.cpuPercent}
-                detail={`Load ${live.load.join(" · ")}`}
+                detail={`Load ${live.load.join(" / ")}`}
               />
               <ResourceBar
                 label="Memory"
@@ -471,7 +678,7 @@ function OverviewPage({
                   <div>
                     <strong>{run.workflow_name}</strong>
                     <small>
-                      {run.full_name} · #{run.run_number}
+                      {run.full_name} / #{run.run_number}
                     </small>
                   </div>
                   <time>{timeAgo(run.started_at)}</time>
@@ -678,12 +885,12 @@ function TacticalOverviewPage({
             <span>CPU</span>
           </div>
           <div className="card-body">
-            <strong>{live ? `${live.cpuPercent.toFixed(1)}%` : "—"} <small>Used</small></strong>
+            <strong>{live ? `${live.cpuPercent.toFixed(1)}%` : "-"} <small>Used</small></strong>
             <div className="card-progress">
               <div className="progress-fill green" style={{ width: live ? `${live.cpuPercent}%` : "0%" }}></div>
             </div>
             <div className="card-footer-detail">
-              {live ? `${((live.cores * live.cpuPercent) / 100).toFixed(1)} / ${live.cores} Cores` : "—"}
+              {live ? `${((live.cores * live.cpuPercent) / 100).toFixed(1)} / ${live.cores} Cores` : "-"}
             </div>
           </div>
         </article>
@@ -695,12 +902,12 @@ function TacticalOverviewPage({
             <span>RAM</span>
           </div>
           <div className="card-body">
-            <strong>{live ? `${live.memory.percent.toFixed(0)}%` : "—"} <small>Used</small></strong>
+            <strong>{live ? `${live.memory.percent.toFixed(0)}%` : "-"} <small>Used</small></strong>
             <div className="card-progress">
               <div className="progress-fill purple" style={{ width: live ? `${live.memory.percent}%` : "0%" }}></div>
             </div>
             <div className="card-footer-detail">
-              {live ? `${formatBytesCompact(live.memory.used)} / ${formatBytesCompact(live.memory.total)}` : "—"}
+              {live ? `${formatBytesCompact(live.memory.used)} / ${formatBytesCompact(live.memory.total)}` : "-"}
             </div>
           </div>
         </article>
@@ -712,12 +919,12 @@ function TacticalOverviewPage({
             <span>SWAP</span>
           </div>
           <div className="card-body">
-            <strong>{live ? `${live.swap.percent.toFixed(0)}%` : "—"} <small>Used</small></strong>
+            <strong>{live ? `${live.swap.percent.toFixed(0)}%` : "-"} <small>Used</small></strong>
             <div className="card-progress">
               <div className="progress-fill violet" style={{ width: live ? `${live.swap.percent}%` : "0%" }}></div>
             </div>
             <div className="card-footer-detail">
-              {live ? `${formatBytesCompact(live.swap.used)} / ${formatBytesCompact(live.swap.total)}` : "—"}
+              {live ? `${formatBytesCompact(live.swap.used)} / ${formatBytesCompact(live.swap.total)}` : "-"}
             </div>
           </div>
         </article>
@@ -729,12 +936,12 @@ function TacticalOverviewPage({
             <span>DISK (/)</span>
           </div>
           <div className="card-body">
-            <strong>{live ? `${live.disk.percent.toFixed(0)}%` : "—"} <small>Used</small></strong>
+            <strong>{live ? `${live.disk.percent.toFixed(0)}%` : "-"} <small>Used</small></strong>
             <div className="card-progress">
               <div className="progress-fill blue" style={{ width: live ? `${live.disk.percent}%` : "0%" }}></div>
             </div>
             <div className="card-footer-detail">
-              {live ? `${formatBytesCompact(live.disk.used)} / ${formatBytesCompact(live.disk.total)}` : "—"}
+              {live ? `${formatBytesCompact(live.disk.used)} / ${formatBytesCompact(live.disk.total)}` : "-"}
             </div>
           </div>
         </article>
@@ -748,15 +955,15 @@ function TacticalOverviewPage({
           <div className="card-body-load">
             <div className="load-col">
               <span className="load-label">1M</span>
-              <span className="load-value">{live ? live.load[0].toFixed(2) : "—"}</span>
+              <span className="load-value">{live ? live.load[0].toFixed(2) : "-"}</span>
             </div>
             <div className="load-col">
               <span className="load-label">5M</span>
-              <span className="load-value">{live ? live.load[1].toFixed(2) : "—"}</span>
+              <span className="load-value">{live ? live.load[1].toFixed(2) : "-"}</span>
             </div>
             <div className="load-col">
               <span className="load-label">15M</span>
-              <span className="load-value">{live ? live.load[2].toFixed(2) : "—"}</span>
+              <span className="load-value">{live ? live.load[2].toFixed(2) : "-"}</span>
             </div>
           </div>
         </article>
@@ -768,9 +975,9 @@ function TacticalOverviewPage({
             <span>SYSTEM</span>
           </div>
           <div className="card-body-system">
-            <strong className="sys-os">{live ? live.os : "—"}</strong>
-            <span className="sys-docker">Docker {live ? live.docker.version : "—"}</span>
-            <span className="sys-uptime">{live ? live.uptime : "—"}</span>
+            <strong className="sys-os">{live ? live.os : "-"}</strong>
+            <span className="sys-docker">Docker {live ? live.docker.version : "-"}</span>
+            <span className="sys-uptime">{live ? live.uptime : "-"}</span>
           </div>
         </article>
       </section>
@@ -827,7 +1034,7 @@ function TacticalOverviewPage({
               <Warning />
               <div>
                 <strong>{alerts.length} ACTIVE SIGNALS</strong>
-                <span>1 upstream offline · DNS gaps · restart loop</span>
+                <span>1 upstream offline / DNS gaps / restart loop</span>
               </div>
             </div>
           </div>
@@ -880,7 +1087,7 @@ function TacticalOverviewPage({
                     <td>
                       <strong>{project.repo}</strong>
                       <small>
-                        {repository?.default_branch ?? "—"} · {project.commit}
+                        {repository?.default_branch ?? "-"} / {project.commit}
                       </small>
                     </td>
                     <td>
@@ -898,7 +1105,7 @@ function TacticalOverviewPage({
                             {run.conclusion ?? run.status}
                           </Badge>
                           <small>
-                            {run.workflow_name} · {timeAgo(run.started_at)}
+                            {run.workflow_name} / {timeAgo(run.started_at)}
                           </small>
                         </>
                       ) : (
@@ -949,11 +1156,15 @@ function ServersPage({
   error,
   refresh,
   refreshing,
+  onOperation,
+  canReboot,
 }: {
   live: LiveData | null;
   error: string;
   refresh: () => void;
   refreshing: boolean;
+  onOperation: (operation: OperationRequest) => void;
+  canReboot: boolean;
 }) {
   return (
     <div className="page-stack">
@@ -966,7 +1177,7 @@ function ServersPage({
             <span className="eyebrow">Primary host</span>
             <h2>{live?.hostname ?? "VM-0-5-ubuntu"}</h2>
             <p>
-              {live?.os ?? "Ubuntu 24.04 LTS"} · kernel {live?.kernel ?? "6.8"}
+              {live?.os ?? "Ubuntu 24.04 LTS"} / kernel {live?.kernel ?? "6.8"}
             </p>
           </div>
         </div>
@@ -977,21 +1188,44 @@ function ServersPage({
           </div>
           <div>
             <span>Uptime</span>
-            <strong>{live?.uptime ?? "—"}</strong>
+            <strong>{live?.uptime ?? "-"}</strong>
           </div>
           <div>
             <span>Sample</span>
-            <strong>{live ? timeAgo(live.checkedAt) : "—"}</strong>
+            <strong>{live ? timeAgo(live.checkedAt) : "-"}</strong>
           </div>
         </div>
-        <button
-          className="icon-button"
-          onClick={refresh}
-          disabled={refreshing}
-          aria-label="Refresh server"
-        >
-          <ArrowClockwise className={refreshing ? "spin" : ""} />
-        </button>
+        <div className="host-actions">
+          <button
+            className="icon-button"
+            onClick={refresh}
+            disabled={refreshing}
+            aria-label="Refresh server"
+          >
+            <ArrowClockwise className={refreshing ? "spin" : ""} />
+          </button>
+          {canReboot ? (
+            <button
+              className="danger-button compact"
+              onClick={() =>
+                onOperation({
+                  endpoint: "/api/operations/action",
+                  title: "Restart primary VPS",
+                  description:
+                    "Seluruh aplikasi akan tidak tersedia sementara. Systemd akan menyalakan service kembali setelah server boot.",
+                  target: live?.hostname || "VM-0-5-ubuntu",
+                  action: "reboot",
+                  body: { type: "server", action: "reboot" },
+                  confirmationText: live?.hostname || "VM-0-5-ubuntu",
+                  buttonLabel: "Restart server",
+                  danger: true,
+                })
+              }
+            >
+              <Power /> Restart server
+            </button>
+          ) : null}
+        </div>
       </section>
       {error && !live ? (
         <div className="inline-error">
@@ -1003,20 +1237,20 @@ function ServersPage({
           <Cpu />
           <span>CPU utilization</span>
           <strong>
-            {live?.cpuPercent.toFixed(1) ?? "—"}
+            {live?.cpuPercent.toFixed(1) ?? "-"}
             <small>%</small>
           </strong>
           <ResourceBar
             label="Current sample"
             value={live?.cpuPercent ?? 0}
-            detail={`Load average ${live?.load.join(" / ") ?? "—"}`}
+            detail={`Load average ${live?.load.join(" / ") ?? "-"}`}
           />
         </article>
         <article className="panel resource-card">
           <Memory />
           <span>Memory pressure</span>
           <strong>
-            {live?.memory.percent.toFixed(1) ?? "—"}
+            {live?.memory.percent.toFixed(1) ?? "-"}
             <small>%</small>
           </strong>
           <ResourceBar
@@ -1034,7 +1268,7 @@ function ServersPage({
           <Pulse />
           <span>Swap usage</span>
           <strong>
-            {live?.swap.percent.toFixed(1) ?? "—"}
+            {live?.swap.percent.toFixed(1) ?? "-"}
             <small>%</small>
           </strong>
           <ResourceBar
@@ -1052,7 +1286,7 @@ function ServersPage({
           <HardDrives />
           <span>Root filesystem</span>
           <strong>
-            {live?.disk.percent.toFixed(1) ?? "—"}
+            {live?.disk.percent.toFixed(1) ?? "-"}
             <small>%</small>
           </strong>
           <ResourceBar
@@ -1073,7 +1307,7 @@ function ServersPage({
             <span className="eyebrow">Sampling policy</span>
             <h2>What stays live</h2>
           </div>
-          <Badge tone="success">15–30 SEC</Badge>
+          <Badge tone="success">15-30 SEC</Badge>
         </div>
         <div className="policy-grid">
           <div>
@@ -1109,9 +1343,13 @@ function ServersPage({
 function ServicesPage({
   live,
   onLogs,
+  onOperation,
+  role,
 }: {
   live: LiveData | null;
   onLogs: (service: string) => void;
+  onOperation: (operation: OperationRequest) => void;
+  role: SessionUser["role"];
 }) {
   const statusMap = new Map(
     live?.services.map((service) => [service.name, service.status]),
@@ -1142,8 +1380,51 @@ function ServicesPage({
           <tbody>
             {serviceInventory.map((service) => {
               const status =
-                statusMap.get(service.name) ??
-                (service.name.endsWith(".service") ? "known" : "pending");
+                statusMap.get(service.name) ?? "pending";
+              const ownerOnly = ["mysql", "docker"].includes(service.name);
+              const adminService = [
+                "nginx",
+                "php8.3-fpm",
+                "supervisor",
+                "cron",
+                "hermes-dashboard.service",
+                "mnemosyne-dashboard.service",
+              ].includes(service.name);
+              const canOperate =
+                role === "owner" ||
+                (!ownerOnly && role === "admin") ||
+                (!ownerOnly && !adminService && role === "operator");
+              const canStop =
+                canOperate &&
+                !["nginx", "php8.3-fpm", "mysql", "docker"].includes(
+                  service.name,
+                );
+              const openServiceAction = (
+                action: "start" | "stop" | "restart",
+              ) =>
+                onOperation({
+                  endpoint: "/api/operations/action",
+                  title: `${action === "restart" ? "Restart" : action === "start" ? "Start" : "Stop"} ${service.name}`,
+                  description:
+                    action === "stop"
+                      ? "Service akan dihentikan dan workload terkait tidak dapat menerima traffic sampai dinyalakan kembali."
+                      : "Opsdeck akan menjalankan action melalui policy allowlist lalu memeriksa status service.",
+                  target: service.name,
+                  action,
+                  body: { type: "service", action, target: service.name },
+                  confirmationText:
+                    action === "stop" ||
+                    (service.name === "docker" && action === "restart")
+                      ? service.name
+                      : undefined,
+                  buttonLabel:
+                    action === "restart"
+                      ? "Restart service"
+                      : action === "start"
+                        ? "Start service"
+                        : "Stop service",
+                  danger: action === "stop" || service.name === "docker",
+                });
               return (
                 <tr key={service.name}>
                   <td>
@@ -1169,12 +1450,48 @@ function ServicesPage({
                     </Badge>
                   </td>
                   <td>
-                    <button
-                      className="row-action"
-                      onClick={() => onLogs(service.name)}
-                    >
-                      Logs
-                    </button>
+                    <div className="row-actions">
+                      <button
+                        className="row-action"
+                        onClick={() => onLogs(service.name)}
+                      >
+                        Logs
+                      </button>
+                      {canOperate ? (
+                        status === "active" ? (
+                          <>
+                            <button
+                              className="row-action action-primary"
+                              onClick={() => openServiceAction("restart")}
+                              aria-label={`Restart ${service.name}`}
+                            >
+                              <ArrowClockwise /> Restart
+                            </button>
+                            {canStop ? (
+                              <button
+                                className="row-action action-danger"
+                                onClick={() => openServiceAction("stop")}
+                                aria-label={`Stop ${service.name}`}
+                              >
+                                <Stop /> Stop
+                              </button>
+                            ) : null}
+                          </>
+                        ) : status === "inactive" || status === "failed" ? (
+                          <button
+                            className="row-action action-primary"
+                            onClick={() => openServiceAction("start")}
+                            aria-label={`Start ${service.name}`}
+                          >
+                            <Play /> Start
+                          </button>
+                        ) : (
+                          <span className="action-status-note">
+                            Refresh status
+                          </span>
+                        )
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               );
@@ -1245,7 +1562,7 @@ function ProjectsPage({
         </div>
         <a
           className="domain-link"
-          href={`https://${selected.domain.split(" · ")[0]}`}
+          href={`https://${selected.domain.split(" / ")[0]}`}
           target="_blank"
           rel="noreferrer"
         >
@@ -1282,7 +1599,7 @@ function ProjectsPage({
           <i>→</i>
           <span>Nginx</span>
           <i>→</i>
-          <span>{selected.runtime.split(" · ")[0]}</span>
+          <span>{selected.runtime.split(" / ")[0]}</span>
           <i>→</i>
           <span>Database</span>
         </div>
@@ -1312,21 +1629,47 @@ function ProjectsPage({
 function DockerPage({
   live,
   onLogs,
+  onOperation,
+  role,
 }: {
   live: LiveData | null;
   onLogs: (container: string) => void;
+  onOperation: (operation: OperationRequest) => void;
+  role: SessionUser["role"];
 }) {
   const containers = live?.docker.containers ?? [];
+  const canRestartEngine = role === "owner";
   return (
     <div className="page-stack">
       <section className="docker-summary">
-        <article className="panel">
+        <article className="panel docker-engine-card">
           <Cube />
           <span>Engine</span>
-          <strong>{live?.docker.version ?? "—"}</strong>
+          <strong>{live?.docker.version ?? "-"}</strong>
           <Badge tone={live?.docker.version ? "success" : "neutral"}>
             server version
           </Badge>
+          {canRestartEngine ? (
+            <button
+              className="row-action action-danger"
+              onClick={() =>
+                onOperation({
+                  endpoint: "/api/operations/action",
+                  title: "Restart Docker engine",
+                  description:
+                    "Semua container akan berhenti sementara. Opsdeck akan kembali melalui systemd setelah Docker aktif.",
+                  target: "docker",
+                  action: "restart",
+                  body: { type: "service", action: "restart", target: "docker" },
+                  confirmationText: "docker",
+                  buttonLabel: "Restart Docker",
+                  danger: true,
+                })
+              }
+            >
+              <ArrowClockwise /> Restart engine
+            </button>
+          ) : null}
         </article>
         <article className="panel">
           <Stack />
@@ -1389,16 +1732,42 @@ function DockerPage({
                       </Badge>
                     </td>
                     <td>
-                      <code>{container.Ports || "—"}</code>
+                      <code>{container.Ports || "-"}</code>
                     </td>
-                    <td>{container.CreatedAt || "—"}</td>
+                    <td>{container.CreatedAt || "-"}</td>
                     <td>
-                      <button
-                        className="row-action"
-                        onClick={() => onLogs(container.Names)}
-                      >
-                        View logs
-                      </button>
+                      <div className="row-actions">
+                        <button
+                          className="row-action"
+                          onClick={() => onLogs(container.Names)}
+                        >
+                          View logs
+                        </button>
+                        {container.Names === "dev-ops-dashboard" &&
+                        role !== "viewer" ? (
+                          <button
+                            className="row-action action-primary"
+                            onClick={() =>
+                              onOperation({
+                                endpoint: "/api/operations/action",
+                                title: "Restart Opsdeck container",
+                                description:
+                                  "Restart dijadwalkan melalui service induk agar dashboard dapat pulih otomatis.",
+                                target: container.Names,
+                                action: "restart",
+                                body: {
+                                  type: "container",
+                                  action: "restart",
+                                  target: container.Names,
+                                },
+                                buttonLabel: "Restart container",
+                              })
+                            }
+                          >
+                            <ArrowClockwise /> Restart
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1421,10 +1790,16 @@ function CiCdPage({
   data,
   onSync,
   syncing,
+  onRerun,
+  canRerun,
+  canManage,
 }: {
   data: DashboardData | null;
   onSync: () => void;
   syncing: boolean;
+  onRerun: (run: WorkflowRun) => void;
+  canRerun: boolean;
+  canManage: boolean;
 }) {
   const repos = data?.repositories ?? [];
   const runs = data?.workflowRuns ?? [];
@@ -1453,21 +1828,25 @@ function CiCdPage({
           <div>
             <span className="eyebrow">GitHub cache</span>
             <strong>
-              {repos.length} repositories · {runs.length} workflow runs
+              {repos.length} repositories / {runs.length} workflow runs
             </strong>
           </div>
         </div>
         <div>
           <span>Last database sync</span>
           <strong>{timeAgo(data?.syncs[0]?.finished_at)}</strong>
-          <button
-            className="primary-button"
-            onClick={onSync}
-            disabled={syncing}
-          >
-            <ArrowClockwise className={syncing ? "spin" : ""} />{" "}
-            {syncing ? "Syncing…" : "Sync GitHub"}
-          </button>
+          {canManage ? (
+            <button
+              className="primary-button"
+              onClick={onSync}
+              disabled={syncing}
+            >
+              <ArrowClockwise className={syncing ? "spin" : ""} />{" "}
+              {syncing ? "Syncing…" : "Sync GitHub"}
+            </button>
+          ) : (
+            <Badge tone="neutral">READ ONLY</Badge>
+          )}
         </div>
       </section>
       <section className="ci-layout">
@@ -1504,7 +1883,7 @@ function CiCdPage({
                   <div>
                     <strong>{repo.full_name}</strong>
                     <small>
-                      {repo.language ?? "No language"} · {repo.default_branch}
+                      {repo.language ?? "No language"} / {repo.default_branch}
                     </small>
                   </div>
                   <Badge
@@ -1535,12 +1914,7 @@ function CiCdPage({
           {filteredRuns.length ? (
             <div className="workflow-table">
               {filteredRuns.map((run) => (
-                <a
-                  href={run.html_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  key={run.id}
-                >
+                <div className="workflow-run-row" key={run.id}>
                   <span className={`run-icon ${run.conclusion ?? run.status}`}>
                     {run.conclusion === "success" ? (
                       <CheckCircle />
@@ -1553,10 +1927,10 @@ function CiCdPage({
                   <div>
                     <strong>{run.workflow_name}</strong>
                     <small>
-                      {run.full_name} · {run.branch ?? "—"}
+                      {run.full_name} / {run.branch ?? "-"}
                     </small>
                   </div>
-                  <code>{run.head_sha?.slice(0, 7) ?? "—"}</code>
+                  <code>{run.head_sha?.slice(0, 7) ?? "-"}</code>
                   <Badge
                     tone={
                       run.conclusion === "success"
@@ -1569,7 +1943,32 @@ function CiCdPage({
                     {run.conclusion ?? run.status}
                   </Badge>
                   <time>{timeAgo(run.started_at)}</time>
-                </a>
+                  <div className="run-actions">
+                    <a
+                      href={run.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Open ${run.workflow_name} on GitHub`}
+                    >
+                      <ArrowSquareOut />
+                    </a>
+                    {canRerun &&
+                    [
+                      "failure",
+                      "cancelled",
+                      "timed_out",
+                      "startup_failure",
+                      "action_required",
+                    ].includes(run.conclusion || "") ? (
+                      <button
+                        onClick={() => onRerun(run)}
+                        aria-label={`Retry ${run.workflow_name}`}
+                      >
+                        <ArrowClockwise /> Retry
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
               ))}
             </div>
           ) : (
@@ -1585,7 +1984,21 @@ function CiCdPage({
   );
 }
 
-function DeploymentsPage({ runs }: { runs: WorkflowRun[] }) {
+function DeploymentsPage({
+  runs,
+  onRerun,
+  canRerun,
+}: {
+  runs: WorkflowRun[];
+  onRerun: (run: WorkflowRun) => void;
+  canRerun: boolean;
+}) {
+  const deliveryRuns = runs.filter(
+    (run) =>
+      (deliveryWorkflowRepositories as readonly string[]).includes(
+        run.full_name,
+      ) && /deploy|release|production/i.test(run.workflow_name),
+  );
   return (
     <div className="page-stack">
       <section className="panel data-panel">
@@ -1594,7 +2007,9 @@ function DeploymentsPage({ runs }: { runs: WorkflowRun[] }) {
             <span className="eyebrow">Environment map</span>
             <h2>Production targets</h2>
           </div>
-          <Badge tone="warning">READ ONLY</Badge>
+          <Badge tone={canRerun ? "success" : "neutral"}>
+            {canRerun ? "ACTIONS ENABLED" : "READ ONLY"}
+          </Badge>
         </div>
         <div className="table-scroll">
           <table>
@@ -1656,8 +2071,8 @@ function DeploymentsPage({ runs }: { runs: WorkflowRun[] }) {
             <h2>Latest GitHub delivery activity</h2>
           </div>
         </div>
-        {runs.length ? (
-          runs.slice(0, 10).map((run) => (
+        {deliveryRuns.length ? (
+          deliveryRuns.slice(0, 10).map((run) => (
             <div className="deployment-row" key={run.id}>
               <span
                 className={`timeline-mark ${run.conclusion ?? run.status}`}
@@ -1680,6 +2095,30 @@ function DeploymentsPage({ runs }: { runs: WorkflowRun[] }) {
                 {run.conclusion ?? run.status}
               </Badge>
               <time>{timeAgo(run.started_at)}</time>
+              {canRerun &&
+              [
+                "failure",
+                "cancelled",
+                "timed_out",
+                "startup_failure",
+                "action_required",
+              ].includes(run.conclusion || "") ? (
+                <button
+                  className="row-action action-primary"
+                  onClick={() => onRerun(run)}
+                >
+                  <ArrowClockwise /> Retry deploy
+                </button>
+              ) : (
+                <a
+                  className="row-action"
+                  href={run.html_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ArrowSquareOut /> Details
+                </a>
+              )}
             </div>
           ))
         ) : (
@@ -1761,7 +2200,7 @@ function LogsPage({
       </div>
       <div className="terminal-head">
         <span>
-          <i /> Live read · last 120 lines
+          <i /> Live read / last 120 lines
         </span>
         <Badge tone="success">REDACTED SOURCE</Badge>
       </div>
@@ -1813,37 +2252,62 @@ function ProjectLogsPage({
     shared?: boolean;
     checkedAt?: string;
   }>({});
+  const logRequest = useRef<AbortController | null>(null);
   const selectedProject = projects.find((project) => project.id === target);
 
   const load = useCallback(async () => {
+    logRequest.current?.abort();
+    const controller = new AbortController();
+    logRequest.current = controller;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 12_000);
     setLoading(true);
     setError("");
     try {
       const response = await fetch(
         `/api/vps/logs?source=${encodeURIComponent(source)}&target=${encodeURIComponent(target)}&stream=${encodeURIComponent(stream)}`,
-        { cache: "no-store" },
+        { cache: "no-store", signal: controller.signal },
       );
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to read logs");
       setLines(payload.lines ?? []);
       setMetadata(payload);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "Unable to read logs",
-      );
+      if (timedOut) {
+        setError("Log request timed out. Try again in a moment.");
+      } else if (!controller.signal.aborted) {
+        setError(
+          nextError instanceof Error ? nextError.message : "Unable to read logs",
+        );
+      }
     } finally {
-      setLoading(false);
+      window.clearTimeout(timeout);
+      if (logRequest.current === controller) {
+        logRequest.current = null;
+        setLoading(false);
+      }
     }
   }, [source, target, stream]);
 
   useEffect(() => {
     load();
+    return () => logRequest.current?.abort();
   }, [load]);
 
   useEffect(() => {
     if (!follow) return;
-    const interval = window.setInterval(load, 5_000);
-    return () => window.clearInterval(interval);
+    const refresh = () => {
+      if (!document.hidden && !logRequest.current) load();
+    };
+    const interval = window.setInterval(refresh, 10_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [follow, load]);
 
   const visibleLines = search
@@ -2002,7 +2466,7 @@ function ProjectLogsPage({
         </div>
         <div className="terminal-head">
           <span>
-            <i /> {follow ? "LIVE FOLLOW · 5S" : "PAUSED"} ·{" "}
+            <i /> {follow ? "LIVE FOLLOW / 5S" : "PAUSED"} /{" "}
             {metadata.streamLabel ?? stream.toUpperCase()}
           </span>
           <time>
@@ -2092,8 +2556,9 @@ function AlertsPage() {
             <button
               className="row-action"
               onClick={() => acknowledge(alert.title)}
+              title="Review marker is stored for this browser session only"
             >
-              {acknowledged.has(alert.title) ? "Reopen" : "Acknowledge"}
+              {acknowledged.has(alert.title) ? "Mark unreviewed" : "Mark reviewed"}
             </button>
           </article>
         ))}
@@ -2132,12 +2597,14 @@ function SettingsPage({
   onSync,
   syncing,
   user,
+  canManageGitHub,
 }: {
   data: DashboardData | null;
   live: LiveData | null;
   onSync: () => void;
   syncing: boolean;
   user: SessionUser;
+  canManageGitHub: boolean;
 }) {
   return (
     <div className="page-stack">
@@ -2163,13 +2630,17 @@ function SettingsPage({
               <dd>{timeAgo(data?.syncs[0]?.finished_at)}</dd>
             </div>
           </dl>
-          <button
-            className="primary-button"
-            onClick={onSync}
-            disabled={syncing}
-          >
-            <ArrowClockwise className={syncing ? "spin" : ""} /> Sync now
-          </button>
+          {canManageGitHub ? (
+            <button
+              className="primary-button"
+              onClick={onSync}
+              disabled={syncing}
+            >
+              <ArrowClockwise className={syncing ? "spin" : ""} /> Sync now
+            </button>
+          ) : (
+            <Badge tone="neutral">READ ONLY</Badge>
+          )}
         </article>
         <article className="panel integration-card">
           <span className="integration-icon">
@@ -2178,7 +2649,8 @@ function SettingsPage({
           <div>
             <h2>Primary VPS</h2>
             <p>
-              SSH read-only untuk metric, service, container, dan log allowlist.
+              SSH terverifikasi untuk metric/log read-only dan action terbatas
+              oleh role serta allowlist.
             </p>
           </div>
           <Badge tone={live ? "success" : "warning"}>
@@ -2230,7 +2702,7 @@ function SettingsPage({
             <div>
               <strong>GitHub repositories</strong>
               <span>MySQL</span>
-              <span>Manual / scheduled 5–15 min</span>
+              <span>Manual / scheduled 5-15 min</span>
               <span>Latest state</span>
             </div>
             <div>
@@ -2240,9 +2712,9 @@ function SettingsPage({
               <span>90 days</span>
             </div>
             <div>
-              <strong>CPU · RAM · disk</strong>
+              <strong>CPU / RAM / disk</strong>
               <span>VPS live</span>
-              <span>15–30 sec on active page</span>
+              <span>15-30 sec on active page</span>
               <span>Downsample 30 days</span>
             </div>
             <div>
@@ -2263,6 +2735,60 @@ function SettingsPage({
           <Badge tone="success">{user.role}</Badge>
         </article>
       </section>
+      <section className="panel audit-panel">
+        <div className="panel-heading">
+          <div>
+            <span className="eyebrow">Operation history</span>
+            <h2>Recent audited actions</h2>
+          </div>
+          <Badge tone="neutral">LATEST 30</Badge>
+        </div>
+        {data?.auditLog?.length ? (
+          <div className="audit-list">
+            {data.auditLog.map((entry) => (
+              <article key={entry.id}>
+                <span className={`audit-state ${entry.status}`}>
+                  {entry.status === "failed" ? (
+                    <XCircle />
+                  ) : entry.status === "success" ? (
+                    <CheckCircle />
+                  ) : (
+                    <ClockCounterClockwise />
+                  )}
+                </span>
+                <div>
+                  <strong>
+                    {entry.action_name} {entry.target_name}
+                  </strong>
+                  <small>
+                    {entry.user_name} / {entry.user_role} / {timeAgo(entry.started_at)}
+                  </small>
+                </div>
+                <Badge
+                  tone={
+                    entry.status === "failed"
+                      ? "danger"
+                      : entry.status === "running" || entry.status === "scheduled"
+                        ? "warning"
+                        : "success"
+                  }
+                >
+                  {entry.status}
+                </Badge>
+                <span className="audit-message">
+                  {entry.message || "Action accepted"}
+                </span>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={ClockCounterClockwise}
+            title="Belum ada action"
+            detail="Restart service, container, server, dan retry workflow akan tercatat di sini."
+          />
+        )}
+      </section>
     </div>
   );
 }
@@ -2270,13 +2796,15 @@ function SettingsPage({
 function EventRail({
   data,
   live,
+  stale,
   onOpenLogs,
 }: {
   data: DashboardData | null;
   live: LiveData | null;
+  stale: boolean;
   onOpenLogs: (projectId: string) => void;
 }) {
-  const [paused, setPaused] = useState(false);
+  const [criticalOnly, setCriticalOnly] = useState(false);
   const [expanded, setExpanded] = useState("alert-0");
   const failedRuns = (data?.workflowRuns ?? [])
     .filter((run) => run.conclusion === "failure")
@@ -2316,38 +2844,39 @@ function EventRail({
       projectId: projects.find((project) => project.repo === run.full_name)?.id,
     })),
   ];
+  const visibleEvents = criticalOnly
+    ? events.filter((event) => event.severity === "critical")
+    : events;
 
   return (
     <aside className="event-rail">
       <header className="event-rail-header">
         <div>
-          <span className={paused ? "paused" : "live-dot"} />
+          <span className={stale ? "paused" : "live-dot"} />
           <div>
-            <p>REAL-TIME EVENTS</p>
-            <strong>
-              {paused ? "FEED PAUSED" : `${events.length} ACTIVE SIGNALS`}
-            </strong>
+            <p>RECENT EVENTS</p>
+            <strong>{visibleEvents.length} OPEN SIGNALS</strong>
           </div>
         </div>
         <div>
-          <button title="Filter critical events">FLT</button>
           <button
-            onClick={() => setPaused((value) => !value)}
-            title={paused ? "Resume feed" : "Pause feed"}
+            onClick={() => setCriticalOnly((value) => !value)}
+            title={criticalOnly ? "Show all events" : "Show critical events"}
+            aria-pressed={criticalOnly}
           >
-            {paused ? "▶" : "Ⅱ"}
+            {criticalOnly ? "ALL" : "CRIT"}
           </button>
         </div>
       </header>
       <div className="event-rail-system">
         <span>HOST</span>
         <strong>{live?.hostname ?? "VPS PENDING"}</strong>
-        <Badge tone={live ? "success" : "warning"}>
-          {live ? "ONLINE" : "STALE"}
+        <Badge tone={live && !stale ? "success" : "warning"}>
+          {live && !stale ? "ONLINE" : live ? "STALE" : "OFFLINE"}
         </Badge>
       </div>
       <div className="event-feed">
-        {events.map((event) => {
+        {visibleEvents.map((event) => {
           const isExpanded = expanded === event.id;
           return (
             <article
@@ -2357,12 +2886,13 @@ function EventRail({
               <button
                 className="event-summary"
                 onClick={() => setExpanded(isExpanded ? "" : event.id)}
+                aria-expanded={isExpanded}
               >
                 <span>{isExpanded ? "▾" : "▸"}</span>
                 <div>
                   <strong>{event.title}</strong>
                   <small>
-                    {event.source} · {event.time}
+                    {event.source} / {event.time}
                   </small>
                 </div>
                 <Badge
@@ -2391,7 +2921,7 @@ function EventRail({
 }
 
 function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) => void }) {
-  const [email, setEmail] = useState("admin@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -2428,7 +2958,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) => void }) {
           </div>
         </div>
         <div className="login-copy">
-          <span className="eyebrow">43.133.155.252 · Jakarta</span>
+          <span className="eyebrow">43.133.155.252 / Jakarta</span>
           <h1>
             Clear operations.
             <br />
@@ -2506,49 +3036,116 @@ export function DashboardApp() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
+  const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState("");
   const [live, setLive] = useState<LiveData | null>(null);
   const [liveError, setLiveError] = useState("");
   const [liveLoading, setLiveLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [eventRailOpen, setEventRailOpen] = useState(false);
+  const [themeReady, setThemeReady] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof document === "undefined") return "light";
+    return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  });
+  const [pendingOperation, setPendingOperation] =
+    useState<OperationRequest | null>(null);
+  const [operationBusy, setOperationBusy] = useState(false);
+  const [operationError, setOperationError] = useState("");
+  const [operationNotice, setOperationNotice] = useState<{
+    tone: "success" | "danger";
+    message: string;
+    auditId?: number;
+  } | null>(null);
   const [logPreset, setLogPreset] = useState({
     source: "project",
     target: "fintrack",
     key: 0,
   });
+  const searchInput = useRef<HTMLInputElement>(null);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const sidebarCloseButton = useRef<HTMLButtonElement>(null);
+  const notificationButton = useRef<HTMLButtonElement>(null);
+  const eventRailCloseButton = useRef<HTMLButtonElement>(null);
+  const sidebarWasOpen = useRef(false);
+  const eventRailWasOpen = useRef(false);
+  const dataRequest = useRef<AbortController | null>(null);
+  const liveRequest = useRef<AbortController | null>(null);
   const meta = pageMeta[active];
   const NavIcon = icons[active];
+
+  const navigate = useCallback((page: ModuleName) => {
+    setActive(page);
+    setSidebarOpen(false);
+    setEventRailOpen(false);
+    const nextHash = `#${encodeURIComponent(page)}`;
+    if (window.location.hash !== nextHash) {
+      window.history.pushState(null, "", nextHash);
+    }
+  }, []);
+
   const loadData = useCallback(async () => {
+    dataRequest.current?.abort();
+    const controller = new AbortController();
+    dataRequest.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    setDataLoading(true);
     try {
-      const response = await fetch("/api/dashboard", { cache: "no-store" });
+      const response = await fetch("/api/dashboard", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const payload = await response.json();
-      if (!response.ok)
-        throw new Error(payload.error || "Unable to load cache");
+      if (!response.ok) throw new Error(payload.error || "Unable to load cache");
       setData(payload);
       setDataError("");
     } catch (error) {
-      setDataError(
-        error instanceof Error ? error.message : "Unable to load cache",
-      );
+      if (!controller.signal.aborted) {
+        setDataError(
+          error instanceof Error ? error.message : "Unable to load cache",
+        );
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (dataRequest.current === controller) {
+        dataRequest.current = null;
+        setDataLoading(false);
+      }
     }
   }, []);
+
   const loadLive = useCallback(async () => {
+    if (liveRequest.current || document.hidden) return;
+    const controller = new AbortController();
+    liveRequest.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 18_000);
     setLiveLoading(true);
     try {
-      const response = await fetch("/api/vps/live", { cache: "no-store" });
+      const response = await fetch("/api/vps/live", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to reach VPS");
       setLive(payload);
       setLiveError("");
     } catch (error) {
       setLiveError(
-        error instanceof Error ? error.message : "Unable to reach VPS",
+        controller.signal.aborted
+          ? "Live check timed out. Last good data is still shown."
+          : error instanceof Error
+            ? error.message
+            : "Unable to reach VPS",
       );
     } finally {
+      window.clearTimeout(timeout);
+      if (liveRequest.current === controller) liveRequest.current = null;
       setLiveLoading(false);
     }
   }, []);
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/me", { cache: "no-store" })
@@ -2568,12 +3165,72 @@ export function DashboardApp() {
       cancelled = true;
     };
   }, []);
+
   useEffect(() => {
     if (user) loadData();
   }, [user, loadData]);
+
   useEffect(() => {
-    window.history.replaceState(null, "", `#${encodeURIComponent(active)}`);
-  }, [active]);
+    function readNavigation() {
+      const hash = decodeURIComponent(window.location.hash.slice(1));
+      if (Object.prototype.hasOwnProperty.call(pageMeta, hash)) {
+        setActive(hash as ModuleName);
+      }
+    }
+    window.addEventListener("popstate", readNavigation);
+    window.addEventListener("hashchange", readNavigation);
+    return () => {
+      window.removeEventListener("popstate", readNavigation);
+      window.removeEventListener("hashchange", readNavigation);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    localStorage.setItem("opsdeck-theme", theme);
+    setThemeReady(true);
+  }, [theme]);
+
+  useEffect(() => {
+    if (sidebarOpen) {
+      window.setTimeout(() => sidebarCloseButton.current?.focus(), 20);
+    } else if (sidebarWasOpen.current) {
+      menuButton.current?.focus();
+    }
+    sidebarWasOpen.current = sidebarOpen;
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (eventRailOpen) {
+      window.setTimeout(() => eventRailCloseButton.current?.focus(), 20);
+    } else if (eventRailWasOpen.current) {
+      notificationButton.current?.focus();
+    }
+    eventRailWasOpen.current = eventRailOpen;
+  }, [eventRailOpen]);
+
+  useEffect(() => {
+    function closeDrawers(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setSidebarOpen(false);
+      setEventRailOpen(false);
+    }
+    document.addEventListener("keydown", closeDrawers);
+    return () => document.removeEventListener("keydown", closeDrawers);
+  }, []);
+
+  useEffect(() => {
+    function focusSearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInput.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", focusSearch);
+    return () => document.removeEventListener("keydown", focusSearch);
+  }, []);
+
   const livePages = useMemo(
     () =>
       new Set<ModuleName>([
@@ -2585,19 +3242,87 @@ export function DashboardApp() {
       ]),
     [],
   );
+
   useEffect(() => {
     if (!user || !livePages.has(active)) return;
-    loadLive();
+    const refresh = () => {
+      if (!document.hidden) loadLive();
+    };
+    refresh();
     const interval = window.setInterval(
-      loadLive,
-      active === "Overview" ? 30_000 : 15_000,
+      refresh,
+      active === "Overview" ? 30_000 : 20_000,
     );
-    return () => window.clearInterval(interval);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [user, active, livePages, loadLive]);
+
+  useEffect(
+    () => () => {
+      dataRequest.current?.abort();
+      liveRequest.current?.abort();
+    },
+    [],
+  );
+
+  const openOperation = useCallback((operation: OperationRequest) => {
+    setOperationError("");
+    setPendingOperation(operation);
+  }, []);
+
+  const closeOperation = useCallback(() => {
+    if (operationBusy) return;
+    setOperationError("");
+    setPendingOperation(null);
+  }, [operationBusy]);
+
+  async function executeOperation(confirmation: string) {
+    if (!pendingOperation || !user) return;
+    setOperationBusy(true);
+    setOperationError("");
+    try {
+      const response = await fetch(pendingOperation.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Opsdeck-Action": "1",
+          "X-Opsdeck-CSRF": user.actionToken,
+          "X-Opsdeck-Request-Id": crypto.randomUUID(),
+        },
+        body: JSON.stringify({ ...pendingOperation.body, confirmation }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Action failed");
+      setPendingOperation(null);
+      setOperationNotice({
+        tone: "success",
+        message: payload.message || "Action accepted",
+        auditId: payload.auditId,
+      });
+      await Promise.all([loadData(), loadLive()]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Action failed";
+      setOperationError(message);
+      setOperationNotice({ tone: "danger", message });
+    } finally {
+      setOperationBusy(false);
+    }
+  }
+
   async function syncGitHub() {
+    if (!user) return;
     setSyncing(true);
     try {
-      const response = await fetch("/api/github/sync", { method: "POST" });
+      const response = await fetch("/api/github/sync", {
+        method: "POST",
+        headers: {
+          "X-Opsdeck-Action": "1",
+          "X-Opsdeck-CSRF": user.actionToken,
+        },
+      });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Sync failed");
       await loadData();
@@ -2607,54 +3332,97 @@ export function DashboardApp() {
       setSyncing(false);
     }
   }
+
+  const rerunWorkflow = useCallback(
+    (run: WorkflowRun) => {
+      openOperation({
+        endpoint: "/api/github/runs/rerun",
+        title: `Retry ${run.workflow_name}`,
+        description:
+          "GitHub akan menjalankan ulang job yang gagal. Status terbaru akan masuk ke cache saat sinkronisasi berikutnya.",
+        target: `${run.full_name} #${run.run_number}`,
+        action: "retry workflow",
+        body: { runId: run.id },
+        buttonLabel: "Retry deploy",
+      });
+    },
+    [openOperation],
+  );
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
   }
+
   function openLogs(target: string, source = "service") {
     setLogPreset({ source, target, key: Date.now() });
-    setActive("Logs");
+    navigate("Logs");
   }
+
   function openProjectLogs(projectId: string) {
     openLogs(projectId, "project");
   }
-  if (authLoading)
+
+  if (authLoading) {
     return (
       <main className="loading-page">
-        <Pulse className="pulse-logo" weight="fill" />
-        <span>Opening control plane</span>
+        <span className="loading-mark">
+          <Pulse weight="fill" />
+        </span>
+        <div>
+          <strong>Opening Opsdeck</strong>
+          <span>Checking your session and data sources</span>
+        </div>
       </main>
     );
+  }
   if (!user) return <LoginScreen onLogin={setUser} />;
+
+  const canRerun = user.role === "owner" || user.role === "admin";
+  const visibleTheme = themeReady ? theme : "light";
   let page: React.ReactNode;
-  if (active === "Overview")
+  if (active === "Overview") {
     page = (
       <TacticalOverviewPage
         data={data}
         live={live}
         liveError={liveError}
-        onNavigate={setActive}
+        onNavigate={navigate}
         onOpenLogs={openProjectLogs}
       />
     );
-  else if (active === "Servers")
+  } else if (active === "Servers") {
     page = (
       <ServersPage
         live={live}
         error={liveError}
         refresh={loadLive}
         refreshing={liveLoading}
+        onOperation={openOperation}
+        canReboot={user.role === "owner"}
       />
     );
-  else if (active === "Services")
-    page = <ServicesPage live={live} onLogs={(target) => openLogs(target)} />;
-  else if (active === "Projects")
-    page = <ProjectsPage onLogs={openProjectLogs} query={globalSearch} />;
-  else if (active === "Docker")
+  } else if (active === "Services") {
     page = (
-      <DockerPage live={live} onLogs={(target) => openLogs(target, "docker")} />
+      <ServicesPage
+        live={live}
+        onLogs={(target) => openLogs(target)}
+        onOperation={openOperation}
+        role={user.role}
+      />
     );
-  else if (active === "Logs")
+  } else if (active === "Projects") {
+    page = <ProjectsPage onLogs={openProjectLogs} query={globalSearch} />;
+  } else if (active === "Docker") {
+    page = (
+      <DockerPage
+        live={live}
+        onLogs={(target) => openLogs(target, "docker")}
+        onOperation={openOperation}
+        role={user.role}
+      />
+    );
+  } else if (active === "Logs") {
     page = (
       <ProjectLogsPage
         key={logPreset.key}
@@ -2662,12 +3430,28 @@ export function DashboardApp() {
         initialTarget={logPreset.target}
       />
     );
-  else if (active === "CI/CD")
-    page = <CiCdPage data={data} onSync={syncGitHub} syncing={syncing} />;
-  else if (active === "Deployments")
-    page = <DeploymentsPage runs={data?.workflowRuns ?? []} />;
-  else if (active === "Alerts") page = <AlertsPage />;
-  else
+  } else if (active === "CI/CD") {
+    page = (
+      <CiCdPage
+        data={data}
+        onSync={syncGitHub}
+        syncing={syncing}
+        onRerun={rerunWorkflow}
+        canRerun={canRerun}
+        canManage={canRerun}
+      />
+    );
+  } else if (active === "Deployments") {
+    page = (
+      <DeploymentsPage
+        runs={data?.workflowRuns ?? []}
+        onRerun={rerunWorkflow}
+        canRerun={canRerun}
+      />
+    );
+  } else if (active === "Alerts") {
+    page = <AlertsPage />;
+  } else {
     page = (
       <SettingsPage
         data={data}
@@ -2675,29 +3459,50 @@ export function DashboardApp() {
         onSync={syncGitHub}
         syncing={syncing}
         user={user}
+        canManageGitHub={canRerun}
       />
     );
+  }
+
   return (
     <main className="app-shell">
-      <aside className="sidebar">
+      <button
+        className={`sidebar-scrim ${sidebarOpen ? "visible" : ""}`}
+        onClick={() => setSidebarOpen(false)}
+        aria-label="Tutup navigasi"
+        aria-hidden={!sidebarOpen}
+        tabIndex={sidebarOpen ? 0 : -1}
+      />
+      <aside
+        id="primary-navigation"
+        className={`sidebar ${sidebarOpen ? "open" : ""}`}
+      >
         <div className="brand">
           <span>
             <Pulse weight="fill" />
           </span>
           <div>
-            <strong>OPSDECK</strong>
-            <small>TACTICAL CONTROL PLANE</small>
+            <strong>Opsdeck</strong>
+            <small>Infrastructure console</small>
           </div>
+          <button
+            ref={sidebarCloseButton}
+            className="sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Tutup navigasi"
+          >
+            <X />
+          </button>
         </div>
         <div className="workspace">
           <span className="workspace-avatar">SP</span>
           <div>
             <strong>Shared production</strong>
-            <small>1 VPS · {projects.length} projects</small>
+            <small>1 VPS / {projects.length} projects</small>
           </div>
-          <i className="online" />
+          <i className={live ? "online" : ""} />
         </div>
-        <nav>
+        <nav aria-label="Main navigation">
           {navGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <p>{group.label}</p>
@@ -2706,7 +3511,8 @@ export function DashboardApp() {
                 return (
                   <button
                     className={active === item ? "active" : ""}
-                    onClick={() => setActive(item)}
+                    onClick={() => navigate(item)}
+                    aria-current={active === item ? "page" : undefined}
                     key={item}
                   >
                     <Icon size={18} />
@@ -2719,13 +3525,15 @@ export function DashboardApp() {
           ))}
         </nav>
         <div className="sidebar-recent">
-          <p>RECENT SIGNALS</p>
-          {alerts.slice(0, 3).map((alert, index) => (
-            <button key={alert.title} onClick={() => setActive("Alerts")}>
-              <span>#</span>
+          <p>Recent signals</p>
+          {alerts.slice(0, 2).map((alert) => (
+            <button key={alert.title} onClick={() => navigate("Alerts")}>
+              <span className={`signal-mark ${alert.severity}`}>
+                <Warning />
+              </span>
               <div>
                 <strong>{alert.source}</strong>
-                <small>INC-{String(index + 1).padStart(3, "0")}</small>
+                <small>{alert.title}</small>
               </div>
             </button>
           ))}
@@ -2745,30 +3553,61 @@ export function DashboardApp() {
           </button>
         </div>
       </aside>
-      <section className="workspace-main">
+      <section className="workspace-main" id="main-content">
         <header className="topbar">
+          <button
+            ref={menuButton}
+            className="mobile-menu-button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Buka navigasi"
+            aria-controls="primary-navigation"
+            aria-expanded={sidebarOpen}
+          >
+            <List />
+          </button>
           <label className="global-search">
             <MagnifyingGlass />
             <input
+              ref={searchInput}
               value={globalSearch}
               onChange={(event) => setGlobalSearch(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") setActive("Projects");
+                if (event.key === "Enter") navigate("Projects");
               }}
-              placeholder="SEARCH PROGRAMS, DOMAINS, REPOS, SERVICES..."
+              placeholder="Search projects, domains, services..."
+              aria-label="Search projects, domains, and services"
             />
             <kbd>⌘ K</kbd>
           </label>
           <div className="top-actions">
             <span className="live-indicator">
-              <i className={live ? "online" : ""} />{" "}
-              {live ? "VPS live" : "VPS idle"}
+              <i className={live && !liveError ? "online" : ""} />
+              {live && !liveError
+                ? "VPS live"
+                : live
+                  ? "VPS stale"
+                  : liveLoading
+                    ? "Checking"
+                    : "VPS offline"}
             </span>
             <button
-              aria-label="Notifications"
-              onClick={() => setActive("Alerts")}
+              aria-label={`Switch to ${visibleTheme === "light" ? "dark" : "light"} mode`}
+              onClick={() =>
+                setTheme(visibleTheme === "light" ? "dark" : "light")
+              }
+              title={`Switch to ${visibleTheme === "light" ? "dark" : "light"} mode`}
+            >
+              {visibleTheme === "light" ? <Moon /> : <Sun />}
+            </button>
+            <button
+              ref={notificationButton}
+              aria-label="Open notifications"
+              onClick={() => setEventRailOpen(true)}
+              aria-controls="notification-drawer"
+              aria-expanded={eventRailOpen}
             >
               <Bell />
+              {alerts.length ? <b className="notification-count">{alerts.length}</b> : null}
             </button>
             <span className="avatar small">
               {user.name.slice(0, 2).toUpperCase()}
@@ -2776,7 +3615,7 @@ export function DashboardApp() {
           </div>
         </header>
         <div className="workspace-content">
-          <header className="page-header technical-title-band">
+          <header className="page-header">
             <div className="page-title-icon">
               <NavIcon />
             </div>
@@ -2792,15 +3631,60 @@ export function DashboardApp() {
                 </span>
               ) : (
                 <span className="sync-note">
-                  <Database /> Cached data · {timeAgo(data?.fetchedAt)}
+                  <Database /> {dataLoading ? "Refreshing cache" : `Updated ${timeAgo(data?.fetchedAt)}`}
                 </span>
               )}
             </div>
           </header>
+          {liveError ? (
+            <div className="stale-banner" role="status">
+              <Warning />
+              <span>{liveError}</span>
+              {!live ? (
+                <button
+                  className="quiet-button"
+                  onClick={loadLive}
+                  disabled={liveLoading}
+                >
+                  <ArrowClockwise className={liveLoading ? "spin" : ""} />
+                  Retry
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {page}
         </div>
       </section>
-      <EventRail data={data} live={live} onOpenLogs={openProjectLogs} />
+      <div
+        id="notification-drawer"
+        className={`event-rail-drawer ${eventRailOpen ? "open" : ""}`}
+      >
+        <button
+          ref={eventRailCloseButton}
+          className="event-rail-close"
+          onClick={() => setEventRailOpen(false)}
+          aria-label="Tutup notifications"
+        >
+          <X />
+        </button>
+        <EventRail
+          data={data}
+          live={live}
+          stale={Boolean(liveError)}
+          onOpenLogs={openProjectLogs}
+        />
+      </div>
+      <OperationDialog
+        operation={pendingOperation}
+        busy={operationBusy}
+        error={operationError}
+        onCancel={closeOperation}
+        onConfirm={executeOperation}
+      />
+      <OperationNotice
+        notice={operationNotice}
+        onClose={() => setOperationNotice(null)}
+      />
     </main>
   );
 }

@@ -1,16 +1,23 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { sessionCookieName, verifySessionToken } from "@/lib/auth";
+import {
+  createActionToken,
+  getSessionUser,
+  sessionCookieName,
+} from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const cookieStore = await cookies();
-  const user = verifySessionToken(cookieStore.get(sessionCookieName)?.value);
+  const sessionToken = cookieStore.get(sessionCookieName)?.value;
+  const user = await getSessionUser();
 
   if (!user) {
     return NextResponse.json({ user: null }, { status: 401 });
   }
 
-  return NextResponse.json({ user });
+  return NextResponse.json({
+    user: { ...user, actionToken: createActionToken(sessionToken!) },
+  });
 }

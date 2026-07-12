@@ -22,6 +22,7 @@ type RepoRow = RowDataPacket & {
 };
 type RunRow = RowDataPacket & {
   id: number;
+  github_id: number;
   full_name: string;
   workflow_name: string;
   event_name: string;
@@ -34,6 +35,18 @@ type RunRow = RowDataPacket & {
   html_url: string;
   started_at: Date | null;
   completed_at: Date | null;
+};
+type AuditRow = RowDataPacket & {
+  id: number;
+  user_name: string;
+  user_role: string;
+  action_name: string;
+  target_type: string;
+  target_name: string;
+  status: string;
+  message: string | null;
+  started_at: Date;
+  finished_at: Date | null;
 };
 type SyncRow = RowDataPacket & {
   status: string;
@@ -57,7 +70,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const [repositories, workflowRuns, syncs, metricHistory] =
+    const [repositories, workflowRuns, syncs, metricHistory, auditLog] =
       await Promise.all([
         queryRows<RepoRow>(
           `SELECT id, owner, name, full_name, description, visibility, default_branch, language,
@@ -65,7 +78,7 @@ export async function GET() {
          FROM github_repositories ORDER BY is_archived ASC, pushed_at DESC LIMIT 100`,
         ),
         queryRows<RunRow>(
-          `SELECT r.id, repo.full_name, r.workflow_name, r.event_name, r.branch, r.head_sha,
+          `SELECT r.id, r.github_id, repo.full_name, r.workflow_name, r.event_name, r.branch, r.head_sha,
                 r.run_number, r.status, r.conclusion, r.actor_login, r.html_url, r.started_at, r.completed_at
          FROM github_workflow_runs r
          JOIN github_repositories repo ON repo.id = r.repository_id
@@ -85,6 +98,13 @@ export async function GET() {
          ) recent_samples
          ORDER BY captured_at ASC`,
         ),
+        queryRows<AuditRow>(
+          `SELECT id, user_name, user_role, action_name, target_type, target_name,
+                  status, message, started_at, finished_at
+           FROM operation_audit_logs
+           ORDER BY started_at DESC
+           LIMIT 30`,
+        ),
       ]);
 
     return NextResponse.json({
@@ -92,6 +112,7 @@ export async function GET() {
       workflowRuns,
       syncs,
       metricHistory,
+      auditLog,
       source: "mysql",
       fetchedAt: new Date().toISOString(),
     });

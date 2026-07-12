@@ -8,11 +8,13 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate-users.mjs",
-    "github:sync": "tsx --env-file-if-exists=.env scripts/sync-github.ts"
+    "github:sync": "tsx --env-file-if-exists=.env scripts/sync-github.ts",
+    "smoke:production": "node --env-file-if-exists=.env scripts/smoke-production.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
     "@types/ssh2": "^1.15.5",
+    "geist": "^1.7.2",
     "mysql2": "^3.22.6",
     "next": "^16.2.10",
     "react": "^19.2.7",

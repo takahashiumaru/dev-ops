@@ -1,18 +1,16 @@
 import { NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth";
+import { authorizeAction } from "@/lib/action-security";
 import { syncGitHub } from "@/lib/github-sync";
 
 export const dynamic = "force-dynamic";
 
-export async function POST() {
-  const user = await getSessionUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!["owner", "admin"].includes(user.role))
-    return NextResponse.json(
-      { error: "Insufficient permission" },
-      { status: 403 },
-    );
+export async function POST(request: Request) {
+  const security = await authorizeAction(request, {
+    roles: ["owner", "admin"],
+    rateLimitKey: "github-sync",
+    minimumIntervalMs: 5_000,
+  });
+  if (security.response) return security.response;
 
   try {
     return NextResponse.json({ ok: true, ...(await syncGitHub()) });

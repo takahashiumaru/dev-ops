@@ -21,12 +21,29 @@ function connectConfig() {
   const password = process.env.VPS_PASSWORD;
   if (!host || !password) throw new Error("VPS connection is not configured");
 
+  const trustedFingerprints = new Set(
+    (process.env.VPS_HOST_FINGERPRINTS || "")
+      .split(",")
+      .map((fingerprint) => fingerprint.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (process.env.NODE_ENV === "production" && trustedFingerprints.size === 0) {
+    throw new Error("VPS host verification is not configured");
+  }
+
   return {
     host,
     port: Number(process.env.VPS_PORT || 22),
     username: process.env.VPS_USER || "ubuntu",
     password,
     readyTimeout: 12_000,
+    ...(trustedFingerprints.size > 0
+      ? {
+          hostHash: "sha256",
+          hostVerifier: (fingerprint: string) =>
+            trustedFingerprints.has(fingerprint.toLowerCase()),
+        }
+      : {}),
   };
 }
 

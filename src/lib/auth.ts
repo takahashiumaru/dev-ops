@@ -53,6 +53,13 @@ function signPayload(encodedPayload: string) {
   return crypto.createHmac("sha256", getSessionSecret()).update(encodedPayload).digest("base64url");
 }
 
+export function createActionToken(sessionToken: string) {
+  return crypto
+    .createHmac("sha256", getSessionSecret())
+    .update(`action:${sessionToken}`)
+    .digest("base64url");
+}
+
 function timingSafeEqual(a: string, b: string) {
   const left = Buffer.from(a);
   const right = Buffer.from(b);

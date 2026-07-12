@@ -1,5 +1,6 @@
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import { getPool, queryRows } from "@/lib/db";
+import { projects } from "@/lib/dashboard-data";
 
 type GitHubRepository = {
   id: number;
@@ -33,6 +34,16 @@ type GitHubWorkflowRun = {
 };
 
 type RepositoryRow = RowDataPacket & { id: number; full_name: string };
+type LockRow = RowDataPacket & { acquired: number };
+
+type WorkflowRunRow = RowDataPacket & {
+  id: number;
+  github_id: number;
+  full_name: string;
+  status: string;
+  conclusion: string | null;
+  is_archived: number;
+};
 
 function githubHeaders() {
   const token = process.env.GITHUB_TOKEN;
@@ -60,6 +71,24 @@ async function githubJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function githubMutation(url: string) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: githubHeaders(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { message?: string };
+      detail = payload.message ? `: ${payload.message}` : "";
+    } catch {
+      detail = "";
+    }
+    throw new Error(`GitHub action failed (${response.status})${detail}`);
+  }
+}
+
 async function githubRepositoryPages() {
   const repositories: GitHubRepository[] = [];
   for (let page = 1; page <= 10; page += 1) {
@@ -80,16 +109,25 @@ function toMysqlDate(value: string | null) {
 
 export async function syncGitHub() {
   const pool = getPool();
-  const startedAt = new Date();
-  const [syncInsert] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO integration_syncs (integration, status, started_at)
-     VALUES ('github', 'running', ?)`,
-    [toMysqlDate(startedAt.toISOString())],
+  const lockConnection = await pool.getConnection();
+  const [lockRows] = await lockConnection.query<LockRow[]>(
+    "SELECT GET_LOCK('opsdeck:github-sync', 0) AS acquired",
   );
-
+  if (Number(lockRows[0]?.acquired) !== 1) {
+    lockConnection.release();
+    throw new Error("A GitHub sync is already running");
+  }
   try {
-    const repositories = await githubRepositoryPages();
-    const syncedAt = toMysqlDate(new Date().toISOString());
+    const startedAt = new Date();
+    const [syncInsert] = await pool.execute<ResultSetHeader>(
+      `INSERT INTO integration_syncs (integration, status, started_at)
+       VALUES ('github', 'running', ?)`,
+      [toMysqlDate(startedAt.toISOString())],
+    );
+
+    try {
+      const repositories = await githubRepositoryPages();
+      const syncedAt = toMysqlDate(new Date().toISOString());
 
     for (const repo of repositories) {
       await pool.execute(
@@ -179,22 +217,84 @@ export async function syncGitHub() {
         syncInsert.insertId,
       ],
     );
-    return {
-      repositories: repositories.length,
-      workflowRuns: runCount,
-      syncedAt,
-    };
-  } catch (error) {
-    await pool.execute(
-      `UPDATE integration_syncs SET status = 'failed', message = ?, finished_at = ? WHERE id = ?`,
-      [
-        error instanceof Error
-          ? error.message.slice(0, 500)
-          : "Unknown sync error",
-        toMysqlDate(new Date().toISOString()),
-        syncInsert.insertId,
-      ],
-    );
-    throw error;
+      return {
+        repositories: repositories.length,
+        workflowRuns: runCount,
+        syncedAt,
+      };
+    } catch (error) {
+      await pool.execute(
+        `UPDATE integration_syncs SET status = 'failed', message = ?, finished_at = ? WHERE id = ?`,
+        [
+          error instanceof Error
+            ? error.message.slice(0, 500)
+            : "Unknown sync error",
+          toMysqlDate(new Date().toISOString()),
+          syncInsert.insertId,
+        ],
+      );
+      throw error;
+    }
+  } finally {
+    await lockConnection
+      .query("SELECT RELEASE_LOCK('opsdeck:github-sync')")
+      .catch(() => undefined);
+    lockConnection.release();
   }
+}
+
+export async function rerunGitHubWorkflow(databaseRunId: number) {
+  const runs = await queryRows<WorkflowRunRow>(
+    `SELECT r.id, r.github_id, r.status, r.conclusion,
+            repo.full_name, repo.is_archived
+     FROM github_workflow_runs r
+     JOIN github_repositories repo ON repo.id = r.repository_id
+     WHERE r.id = ?
+     LIMIT 1`,
+    [databaseRunId],
+  );
+  const run = runs[0];
+  if (!run || run.is_archived) throw new Error("Workflow run is not available");
+  const allowedRepositories = new Set<string>(
+    projects
+      .map((project) => project.repo)
+      .filter((repository) => repository.includes("/")),
+  );
+  if (!allowedRepositories.has(run.full_name)) {
+    throw new Error("Workflow retry is not enabled for this repository");
+  }
+  if (run.status !== "completed") {
+    throw new Error("Only completed workflow runs can be retried");
+  }
+  if (
+    ![
+      "failure",
+      "cancelled",
+      "timed_out",
+      "startup_failure",
+      "action_required",
+    ].includes(run.conclusion || "")
+  ) {
+    throw new Error("Only failed or cancelled workflow runs can be retried");
+  }
+
+  const [owner, repository] = run.full_name.split("/");
+  if (!owner || !repository) throw new Error("Repository name is invalid");
+  const mode = run.conclusion === "failure" ? "rerun-failed-jobs" : "rerun";
+  await githubMutation(
+    `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/actions/runs/${run.github_id}/${mode}`,
+  );
+
+  await getPool().execute(
+    `UPDATE github_workflow_runs
+     SET status = 'queued', conclusion = NULL, completed_at = NULL, synced_at = UTC_TIMESTAMP()
+     WHERE id = ?`,
+    [run.id],
+  );
+  return {
+    runId: run.id,
+    repository: run.full_name,
+    mode,
+    message: `GitHub workflow retry requested for ${run.full_name}.`,
+  };
 }
