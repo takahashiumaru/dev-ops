@@ -3164,6 +3164,7 @@ export function DashboardApp() {
   const [syncing, setSyncing] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [eventRailOpen, setEventRailOpen] = useState(false);
@@ -3442,6 +3443,7 @@ export function DashboardApp() {
       setSidebarOpen(false);
       setEventRailOpen(false);
       setSearchOpen(false);
+      setLogoutConfirmOpen(false);
     }
     document.addEventListener("keydown", closeDrawers);
     return () => document.removeEventListener("keydown", closeDrawers);
@@ -3763,20 +3765,6 @@ export function DashboardApp() {
             </div>
           ))}
         </nav>
-        <div className="sidebar-recent">
-          <p>Recent signals</p>
-          {activeAlerts.slice(0, 2).map((alert) => (
-            <button key={alert.title} onClick={() => navigate("Alerts")}>
-              <span className={`signal-mark ${alert.severity}`}>
-                <Warning />
-              </span>
-              <div>
-                <strong>{alert.source}</strong>
-                <small>{alert.title}</small>
-              </div>
-            </button>
-          ))}
-        </div>
         <div className="sidebar-footer">
           <div>
             <div>
@@ -3784,7 +3772,7 @@ export function DashboardApp() {
               <small>{user.role}</small>
             </div>
           </div>
-          <button onClick={logout} aria-label="Sign out">
+          <button onClick={() => setLogoutConfirmOpen(true)} aria-label="Sign out">
             <SignOut />
           </button>
         </div>
@@ -3988,6 +3976,34 @@ export function DashboardApp() {
         onCancel={closeOperation}
         onConfirm={executeOperation}
       />
+      {logoutConfirmOpen ? (
+        <div className="logout-dialog-backdrop" role="presentation">
+          <section
+            className="logout-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="logout-dialog-title"
+            aria-describedby="logout-dialog-description"
+          >
+            <span className="logout-dialog-icon"><SignOut /></span>
+            <div>
+              <span className="eyebrow">End session</span>
+              <h2 id="logout-dialog-title">Are you sure you want to log out?</h2>
+              <p id="logout-dialog-description">
+                You will need to sign in again to access the infrastructure console.
+              </p>
+            </div>
+            <footer>
+              <button className="quiet-button" onClick={() => setLogoutConfirmOpen(false)} autoFocus>
+                Cancel
+              </button>
+              <button className="logout-confirm-button" onClick={logout}>
+                <SignOut /> Log out
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
       <OperationNotice
         notice={operationNotice}
         onClose={() => setOperationNotice(null)}

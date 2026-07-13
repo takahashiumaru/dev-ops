@@ -6,6 +6,7 @@ import "./modern.css";
 import "./sidebar-active.css";
 import "./sidebar-performance.css";
 import "./login.css";
+import "./logout-dialog.css";
 
 export const metadata: Metadata = {
   title: "Opsdeck | Infrastructure Console",
