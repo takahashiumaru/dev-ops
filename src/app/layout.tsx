@@ -9,6 +9,9 @@ import "./login.css";
 import "./logout-dialog.css";
 import "./event-rail-overlay.css";
 import "./live-log.css";
+import "@xterm/xterm/css/xterm.css";
+import "./terminal.css";
+import "./change-password.css";
 
 export const metadata: Metadata = {
   title: "Opsdeck | Infrastructure Console",

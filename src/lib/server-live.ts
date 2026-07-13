@@ -1,4 +1,4 @@
-import { Client } from "ssh2";
+import { Client, type ClientChannel } from "ssh2";
 
 export type LiveServerData = {
   hostname: string;
@@ -85,6 +85,36 @@ export function runRemote(command: string) {
             else resolve(stdout.trim());
           });
         });
+      })
+      .on("error", (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      })
+      .connect(connectConfig());
+  });
+}
+
+export function openRemoteShell(cols = 120, rows = 32) {
+  return new Promise<{ client: Client; stream: ClientChannel }>((resolve, reject) => {
+    const client = new Client();
+    const timeout = setTimeout(() => {
+      client.end();
+      reject(new Error("Terminal connection timed out"));
+    }, 15_000);
+    client
+      .on("ready", () => {
+        client.shell(
+          { term: "xterm-256color", cols, rows, width: 0, height: 0 },
+          (error, stream) => {
+            clearTimeout(timeout);
+            if (error) {
+              client.end();
+              reject(error);
+              return;
+            }
+            resolve({ client, stream });
+          },
+        );
       })
       .on("error", (error) => {
         clearTimeout(timeout);

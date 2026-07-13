@@ -116,6 +116,28 @@ function verifyPassword(password: string, storedHash: string) {
   return false;
 }
 
+export async function changeUserPassword(
+  userId: number,
+  currentPassword: string,
+  newPassword: string,
+) {
+  const rows = await queryRows<UserRow>(
+    `SELECT id, name, email, password_hash, role, status
+     FROM users
+     WHERE id = ? AND status = 'active' AND deleted_at IS NULL
+     LIMIT 1`,
+    [userId],
+  );
+  const user = rows[0];
+  if (!user || !verifyPassword(currentPassword, user.password_hash)) return false;
+
+  await getPool().execute(
+    `UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [hashPassword(newPassword), userId],
+  );
+  return true;
+}
+
 export async function authenticateUser(email: string, password: string) {
   const rows = await queryRows<UserRow>(
     `SELECT id, name, email, password_hash, role, status

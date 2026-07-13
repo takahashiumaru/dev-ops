@@ -3,7 +3,7 @@ export const navGroups = [
   { label: "Observability", items: ["Logs"] },
   { label: "Infrastructure", items: ["Servers", "Services", "Docker"] },
   { label: "Delivery", items: ["CI/CD", "Deployments"] },
-  { label: "System", items: ["Settings"] },
+  { label: "System", items: ["Terminal", "Settings"] },
 ] as const;
 
 export type ModuleName = (typeof navGroups)[number]["items"][number];
@@ -62,6 +62,11 @@ export const pageMeta: Record<
     title: "Alerts & thresholds",
     description:
       "Risiko aktif, prioritas, sumber sinyal, dan langkah penanganan.",
+  },
+  Terminal: {
+    eyebrow: "Secure shell",
+    title: "VPS terminal",
+    description: "Akses command line VPS langsung dari Opsdeck untuk akun owner.",
   },
   Settings: {
     eyebrow: "Control plane",

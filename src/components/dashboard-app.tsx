@@ -31,6 +31,7 @@ import {
   Info,
   List,
   ListMagnifyingGlass,
+  LockKey,
   MagnifyingGlass,
   Memory,
   Moon,
@@ -57,6 +58,8 @@ import {
   serviceInventory,
   type ModuleName,
 } from "@/lib/dashboard-data";
+import type { Terminal as XTermInstance } from "@xterm/xterm";
+import type { FitAddon as FitAddonInstance } from "@xterm/addon-fit";
 
 type InfrastructureAlert = {
   severity: "warning" | "critical";
@@ -201,6 +204,7 @@ const icons: Record<ModuleName, typeof SquaresFour> = {
   "CI/CD": GitBranch,
   Deployments: RocketLaunch,
   Alerts: Warning,
+  Terminal: TerminalWindow,
   Settings: Gear,
 };
 
@@ -2708,6 +2712,143 @@ function AlertsPage({
   );
 }
 
+function TerminalPage({ user }: { user: SessionUser }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<XTermInstance | null>(null);
+  const fitRef = useRef<FitAddonInstance | null>(null);
+  const sessionRef = useRef("");
+  const inputBufferRef = useRef("");
+  const inputTimerRef = useRef<number | null>(null);
+  const [state, setState] = useState<"connecting" | "connected" | "closed" | "error">("connecting");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let disposed = false;
+    let eventSource: EventSource | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    const headers = () => ({
+      "Content-Type": "application/json",
+      "X-Opsdeck-Action": "1",
+      "X-Opsdeck-CSRF": user.actionToken,
+    });
+    const send = async (payload: Record<string, unknown>) => {
+      if (!sessionRef.current) return;
+      await fetch("/api/vps/terminal/session", {
+        method: "POST", headers: headers(),
+        body: JSON.stringify({ ...payload, id: sessionRef.current }),
+      }).catch(() => undefined);
+    };
+
+    async function connect() {
+      try {
+        const [{ Terminal }, { FitAddon }] = await Promise.all([
+          import("@xterm/xterm"), import("@xterm/addon-fit"),
+        ]);
+        if (disposed || !containerRef.current) return;
+        const terminal = new Terminal({
+          cursorBlink: true,
+          cursorStyle: "bar",
+          convertEol: false,
+          fontFamily: "var(--font-geist-mono), monospace",
+          fontSize: 13,
+          lineHeight: 1.35,
+          scrollback: 5000,
+          theme: {
+            background: "#08101d", foreground: "#d9e6f7", cursor: "#60a5fa",
+            selectionBackground: "#28496f", black: "#111827", red: "#fb7185",
+            green: "#55d39a", yellow: "#fbbf24", blue: "#60a5fa",
+            magenta: "#c084fc", cyan: "#22d3ee", white: "#e5e7eb",
+          },
+        });
+        const fit = new FitAddon();
+        terminal.loadAddon(fit);
+        terminal.open(containerRef.current);
+        fit.fit();
+        terminalRef.current = terminal;
+        fitRef.current = fit;
+        terminal.writeln("\x1b[38;5;75mConnecting to primary VPS…\x1b[0m");
+
+        const response = await fetch("/api/vps/terminal/session", {
+          method: "POST",
+          headers: { ...headers(), "X-Opsdeck-Request-Id": crypto.randomUUID() },
+          body: JSON.stringify({ action: "create", cols: terminal.cols, rows: terminal.rows }),
+        });
+        const payload = (await response.json()) as { id?: string; error?: string };
+        if (!response.ok || !payload.id) throw new Error(payload.error || "SSH connection failed");
+        if (disposed) return;
+        sessionRef.current = payload.id;
+        terminal.clear();
+        setState("connected");
+
+        eventSource = new EventSource(`/api/vps/terminal/session?id=${encodeURIComponent(payload.id)}`);
+        eventSource.addEventListener("data", (event) => {
+          const binary = atob((event as MessageEvent).data);
+          const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+          terminal.write(bytes);
+        });
+        eventSource.addEventListener("exit", (event) => {
+          terminal.writeln(`\r\n\x1b[38;5;203m${(event as MessageEvent).data}\x1b[0m`);
+          setState("closed");
+          eventSource?.close();
+        });
+        eventSource.onerror = () => {
+          if (!disposed && state !== "closed") setState("error");
+        };
+
+        terminal.onData((data) => {
+          inputBufferRef.current += data;
+          if (inputTimerRef.current !== null) return;
+          inputTimerRef.current = window.setTimeout(() => {
+            const buffered = inputBufferRef.current;
+            inputBufferRef.current = "";
+            inputTimerRef.current = null;
+            void send({ action: "input", data: buffered });
+          }, 24);
+        });
+        terminal.onResize(({ cols, rows }) => void send({ action: "resize", cols, rows }));
+        resizeObserver = new ResizeObserver(() => fit.fit());
+        resizeObserver.observe(containerRef.current);
+        terminal.focus();
+      } catch (caught) {
+        if (disposed) return;
+        setError(caught instanceof Error ? caught.message : "Terminal connection failed");
+        setState("error");
+      }
+    }
+    void connect();
+    return () => {
+      disposed = true;
+      eventSource?.close();
+      resizeObserver?.disconnect();
+      if (inputTimerRef.current !== null) window.clearTimeout(inputTimerRef.current);
+      const id = sessionRef.current;
+      if (id) void fetch(`/api/vps/terminal/session?id=${encodeURIComponent(id)}`, {
+        method: "DELETE", headers: headers(), keepalive: true,
+      });
+      terminalRef.current?.dispose();
+      terminalRef.current = null;
+      sessionRef.current = "";
+    };
+  }, [user.actionToken]);
+
+  return (
+    <section className="terminal-shell" aria-label="VPS terminal">
+      <header className="terminal-toolbar">
+        <div className="terminal-window-controls" aria-hidden="true"><i /><i /><i /></div>
+        <div><strong>primary-vps</strong><span>Interactive SSH PTY · owner access</span></div>
+        <Badge tone={state === "connected" ? "success" : state === "connecting" ? "warning" : "danger"}>
+          {state.toUpperCase()}
+        </Badge>
+      </header>
+      <div className="terminal-xterm" ref={containerRef} onClick={() => terminalRef.current?.focus()} />
+      <footer className="terminal-statusbar">
+        <span><i className={state === "connected" ? "online" : ""} /> {state === "connected" ? "PTY session active" : error || "Connecting…"}</span>
+        <span>Ctrl+C supported · session timeout 30 min</span>
+      </footer>
+    </section>
+  );
+}
+
 function SettingsPage({
   data,
   live,
@@ -2715,6 +2856,7 @@ function SettingsPage({
   syncing,
   user,
   canManageGitHub,
+  onPasswordChanged,
 }: {
   data: DashboardData | null;
   live: LiveData | null;
@@ -2722,7 +2864,53 @@ function SettingsPage({
   syncing: boolean;
   user: SessionUser;
   canManageGitHub: boolean;
+  onPasswordChanged: () => void;
 }) {
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
+  function closePasswordDialog() {
+    if (passwordBusy) return;
+    setPasswordDialogOpen(false);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError("");
+  }
+
+  async function submitPassword(event: FormEvent) {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Konfirmasi password baru tidak sama.");
+      return;
+    }
+    setPasswordBusy(true);
+    setPasswordError("");
+    try {
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Opsdeck-Action": "1",
+          "X-Opsdeck-CSRF": user.actionToken,
+          "X-Opsdeck-Request-Id": crypto.randomUUID(),
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Password gagal diubah");
+      onPasswordChanged();
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "Password gagal diubah");
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
   return (
     <div className="page-stack">
       <section className="integration-grid">
@@ -2850,6 +3038,9 @@ function SettingsPage({
             <p>{user.email}</p>
           </div>
           <Badge tone="success">{user.role}</Badge>
+          <button className="change-password-button" onClick={() => setPasswordDialogOpen(true)}>
+            <LockKey /> Change password
+          </button>
         </article>
       </section>
       <section className="panel audit-panel">
@@ -2906,6 +3097,37 @@ function SettingsPage({
           />
         )}
       </section>
+      {passwordDialogOpen ? (
+        <div className="password-dialog-backdrop" role="presentation">
+          <form className="password-dialog" role="dialog" aria-modal="true"
+            aria-labelledby="password-dialog-title" onSubmit={submitPassword}>
+            <header>
+              <span className="password-dialog-icon"><LockKey /></span>
+              <div><span className="eyebrow">Account security</span><h2 id="password-dialog-title">Change password</h2></div>
+              <button type="button" className="icon-button" onClick={closePasswordDialog} aria-label="Close"><X /></button>
+            </header>
+            <p>Gunakan minimal 12 karakter. Setelah berhasil, Anda perlu login kembali.</p>
+            <label><span>Password saat ini</span><input type="password" value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" required autoFocus /></label>
+            <label><span>Password baru</span><input type="password" value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" minLength={12} maxLength={128} required /></label>
+            <label><span>Ulangi password baru</span><input type="password" value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={12} maxLength={128} required /></label>
+            <div className="password-strength" aria-label="Password requirements">
+              <i className={newPassword.length >= 12 ? "met" : ""} />
+              <span>{newPassword.length >= 12 ? "Panjang password sudah aman" : "Minimal 12 karakter"}</span>
+            </div>
+            {passwordError ? <p className="password-dialog-error" role="alert"><Warning /> {passwordError}</p> : null}
+            <footer>
+              <button type="button" className="quiet-button" onClick={closePasswordDialog} disabled={passwordBusy}>Cancel</button>
+              <button type="submit" className="primary-button" disabled={passwordBusy || newPassword.length < 12}>
+                {passwordBusy ? <ArrowClockwise className="spin" /> : <LockKey />}
+                {passwordBusy ? "Updating…" : "Update password"}
+              </button>
+            </footer>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3238,7 +3460,7 @@ export function DashboardApp() {
   const searchResults = useMemo(() => {
     const query = globalSearch.trim().toLowerCase();
     const menuResults = navGroups.flatMap((group) =>
-      group.items.map((item) => ({
+      group.items.filter((item) => item !== "Terminal" || user?.role === "owner").map((item) => ({
         id: `menu-${item}`,
         type: "Menu",
         title: item,
@@ -3283,7 +3505,7 @@ export function DashboardApp() {
         `${item.title} ${item.detail} ${item.type}`.toLowerCase().includes(query),
       )
       .slice(0, 12);
-  }, [data?.repositories, globalSearch]);
+  }, [data?.repositories, globalSearch, user?.role]);
 
   const navigate = useCallback((page: ModuleName) => {
     setActive(page);
@@ -3703,6 +3925,13 @@ export function DashboardApp() {
         checkedAt={dnsAudit?.checkedAt ?? live?.checkedAt ?? null}
       />
     );
+  } else if (active === "Terminal") {
+    page = user.role === "owner" ? (
+      <TerminalPage user={user} />
+    ) : (
+      <EmptyState icon={TerminalWindow} title="Owner access required"
+        detail="Terminal VPS hanya tersedia untuk akun owner." />
+    );
   } else {
     page = (
       <SettingsPage
@@ -3712,6 +3941,7 @@ export function DashboardApp() {
         syncing={syncing}
         user={user}
         canManageGitHub={canRerun}
+        onPasswordChanged={() => setUser(null)}
       />
     );
   }
@@ -3758,7 +3988,7 @@ export function DashboardApp() {
           {navGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <p>{group.label}</p>
-              {group.items.map((item) => {
+              {group.items.filter((item) => item !== "Terminal" || user.role === "owner").map((item) => {
                 const Icon = icons[item];
                 return (
                   <button
