@@ -3017,8 +3017,8 @@ function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) => void }) {
     <main className="login-page">
       <section className="login-visual">
         <div className="brand">
-          <span>
-            <Pulse weight="fill" />
+          <span className="brand-mark">
+            <img src="/icon.svg" alt="" aria-hidden="true" />
           </span>
           <div>
             <strong>Opsdeck</strong>
@@ -3550,8 +3550,8 @@ export function DashboardApp() {
         className={`sidebar ${sidebarOpen ? "open" : ""}`}
       >
         <div className="brand">
-          <span>
-            <Pulse weight="fill" />
+          <span className="brand-mark">
+            <img src="/icon.svg" alt="" aria-hidden="true" />
           </span>
           <div>
             <strong>Opsdeck</strong>

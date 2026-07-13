@@ -2885,10 +2885,188 @@ i.online,
     transition: opacity 180ms ease;
   }
 
-  .sidebar-scrim.visible {
-    opacity: 1;
-    pointer-events: auto;
+.sidebar-scrim.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Opsdeck identity + quiet navigation treatment */
+:root,
+:root[data-theme="light"] {
+  --ops-ink: #14243d;
+  --ops-orange: #f36b21;
+  --ops-blue: #3478e5;
+  --ops-sky: #dceeff;
+  --ops-sidebar: #f2f8ff;
+  --ops-sidebar-line: #d7e8fb;
+  --ops-sidebar-hover: #e7f2ff;
+  --ops-sidebar-active: #d7eaff;
+}
+
+:root[data-theme="dark"] {
+  --ops-ink: #e8eef8;
+  --ops-orange: #ff8a4c;
+  --ops-blue: #6ea4ff;
+  --ops-sky: #1a3558;
+  --ops-sidebar: #10141d;
+  --ops-sidebar-line: #202938;
+  --ops-sidebar-hover: #171e2a;
+  --ops-sidebar-active: #1a2638;
+}
+
+.app-shell {
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 24px;
+  padding: 18px 22px 18px 18px;
+}
+
+.app-shell.has-rail {
+  grid-template-columns: 248px minmax(0, 1fr) 306px;
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
+.app-shell.sidebar-collapsed.has-rail {
+  grid-template-columns: 76px minmax(0, 1fr) 306px;
+}
+
+.sidebar {
+  top: 18px;
+  height: calc(100dvh - 36px);
+  border: 1px solid var(--ops-sidebar-line);
+  border-radius: 18px;
+  background: var(--ops-sidebar) !important;
+  box-shadow: 0 12px 30px rgba(52, 120, 229, .08);
+}
+
+.brand {
+  min-height: 76px;
+  padding: 17px 18px 15px;
+  border-bottom: 1px solid var(--ops-sidebar-line);
+}
+
+.brand > .brand-mark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid rgba(52, 120, 229, .18);
+  border-radius: 14px;
+  background: var(--ops-sky);
+  box-shadow: none;
+}
+
+.brand-mark img {
+  width: 34px;
+  height: 34px;
+}
+
+.brand strong {
+  color: var(--ops-ink);
+  font-size: 17px;
+  letter-spacing: -.04em;
+}
+
+.brand small {
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.workspace {
+  margin: 18px 14px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--ops-sidebar-line);
+  border-radius: 0;
+  padding: 0 4px 17px;
+  background: transparent;
+}
+
+.workspace-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #d8ebff !important;
+  color: var(--ops-blue) !important;
+}
+
+.workspace strong { font-size: 11px; }
+.workspace small { font-size: 9px; }
+
+.sidebar nav { padding: 0 10px; }
+.nav-group { padding: 10px 0 8px; }
+.nav-group p, .sidebar-recent > p {
+  margin: 0 10px 7px;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.nav-group button {
+  min-height: 42px;
+  margin-bottom: 1px;
+  border-radius: 10px;
+  padding: 10px 11px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 580;
+}
+
+.nav-group button:hover {
+  background: var(--ops-sidebar-hover);
+  color: var(--ops-ink);
+}
+
+.nav-group button.active,
+[data-theme="dark"] .nav-group button.active {
+  border-left: 2px solid var(--ops-blue) !important;
+  padding-left: 9px;
+  background: var(--ops-sidebar-active) !important;
+  color: var(--ops-ink) !important;
+  box-shadow: none;
+  font-weight: 650;
+}
+
+.nav-group button.active svg { color: var(--ops-orange); }
+.nav-group button b { border: 0; background: transparent; color: var(--red); }
+
+.sidebar-recent {
+  border-top: 1px solid var(--ops-sidebar-line);
+  padding: 14px 10px 9px;
+}
+
+.sidebar-recent button { border-radius: 9px; }
+.sidebar-recent button:hover { background: var(--ops-sidebar-hover); }
+.signal-mark { width: 28px; height: 28px; border-radius: 8px; }
+
+.sidebar-footer {
+  min-height: 68px;
+  border-top: 1px solid var(--ops-sidebar-line);
+  padding: 12px 16px;
+}
+
+.sidebar-footer strong { font-size: 11px; }
+.sidebar-footer small { font-size: 9px; }
+.sidebar-footer button { color: var(--faint); }
+
+.sidebar-toggle {
+  border-color: var(--ops-sidebar-line);
+  background: var(--ops-sidebar);
+}
+
+[data-theme="dark"] .brand strong { color: var(--text); }
+[data-theme="dark"] .brand > .brand-mark { background: #163050; }
+
+@media (max-width: 1200px) {
+  .app-shell, .app-shell.has-rail, .app-shell.sidebar-collapsed, .app-shell.sidebar-collapsed.has-rail {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 12px;
   }
+}
 
   .mobile-menu-button {
     display: grid;
@@ -3162,3 +3340,74 @@ i.online,
 .meter-fill.green { background: var(--green) !important; }
 .meter-fill.amber { background: var(--orange) !important; }
 .meter-fill.red { background: var(--red) !important; }
+
+/* Final sidebar pass: match the calm pale-blue active state from the reference. */
+.sidebar nav {
+  padding: 2px 10px 0 !important;
+}
+
+.nav-group {
+  padding: 15px 0 12px !important;
+}
+
+.nav-group + .nav-group {
+  border-top: 0 !important;
+}
+
+.nav-group button,
+.nav-group button.active,
+[data-theme="dark"] .nav-group button.active {
+  min-height: 46px !important;
+  margin: 0 0 4px !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  padding: 11px 12px !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  box-shadow: none !important;
+  transform: none;
+  font-size: 13px !important;
+  font-weight: 620 !important;
+}
+
+.nav-group button:hover {
+  background: var(--ops-sidebar-hover) !important;
+  color: var(--ops-ink) !important;
+}
+
+.sidebar .nav-group button.active,
+.sidebar .nav-group button[aria-current="page"],
+[data-theme="dark"] .sidebar .nav-group button.active,
+[data-theme="dark"] .sidebar .nav-group button[aria-current="page"] {
+  background: var(--ops-sidebar-active) !important;
+  outline: 1px solid rgba(52, 120, 229, .18) !important;
+  outline-offset: -1px !important;
+  color: var(--ops-blue) !important;
+  font-weight: 700 !important;
+}
+
+.sidebar .nav-group button.active svg,
+.sidebar .nav-group button[aria-current="page"] svg {
+  color: var(--ops-orange) !important;
+}
+
+.sidebar .nav-group button.active::before,
+.sidebar .nav-group button[aria-current="page"]::before {
+  display: none !important;
+}
+
+.nav-group button b {
+  min-width: 28px !important;
+  height: 25px !important;
+  margin-left: auto !important;
+  border: 1px solid #bfd8f6 !important;
+  border-radius: 10px !important;
+  padding: 0 8px !important;
+  background: #eef7ff !important;
+  color: #ef4444 !important;
+  box-shadow: 0 1px 2px rgba(52, 120, 229, .06) !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  line-height: 23px !important;
+  text-align: center !important;
+}
