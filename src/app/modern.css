@@ -1781,9 +1781,20 @@ i.online,
 }
 
 .ci-toolbar {
+  min-height: 74px;
+  align-items: center;
+  border: 1px solid #dbeafe;
   border-radius: 15px;
-  padding: 15px 18px;
-  background: var(--accent-soft);
+  padding: 14px 16px;
+  background: #f4f8ff;
+}
+
+.ci-toolbar > div {
+  gap: 12px;
+}
+
+.ci-toolbar > div:last-child {
+  gap: 10px;
 }
 
 .ci-toolbar svg {
@@ -1801,8 +1812,13 @@ i.online,
 }
 
 .ci-layout {
-  grid-template-columns: minmax(300px, 0.72fr) minmax(520px, 1.28fr);
-  gap: 14px;
+  grid-template-columns: minmax(340px, 0.68fr) minmax(560px, 1.32fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.ci-layout > .data-panel {
+  overflow: hidden;
 }
 
 .repo-filter,
@@ -1820,7 +1836,7 @@ i.online,
 }
 
 .repo-list {
-  padding: 7px;
+  padding: 8px 10px 12px;
 }
 
 .repo-list button {
@@ -1833,13 +1849,13 @@ i.online,
 .repo-list button:hover,
 .repo-list button.selected {
   background: var(--accent-soft) !important;
-  box-shadow: inset 3px 0 var(--accent) !important;
+  box-shadow: none !important;
 }
 
 [data-theme="dark"] .repo-list button:hover,
 [data-theme="dark"] .repo-list button.selected {
   background: var(--panel-2) !important;
-  box-shadow: inset 3px 0 var(--line-strong) !important;
+  box-shadow: none !important;
 }
 
 .repo-list button:hover strong,
@@ -1886,7 +1902,7 @@ i.online,
 }
 
 .workflow-table {
-  padding: 7px;
+  padding: 6px 10px 12px;
 }
 
 .workflow-run-row {
@@ -1897,6 +1913,10 @@ i.online,
   min-height: 59px;
   border-radius: 10px;
   padding: 8px;
+}
+
+.workflow-run-row + .workflow-run-row {
+  border-top: 1px solid var(--line);
 }
 
 .workflow-run-row:hover {
@@ -2918,7 +2938,7 @@ i.online,
   --ops-sidebar: #ffffff;
   --ops-sidebar-line: #e2e8f0;
   --ops-sidebar-hover: #f8fafc;
-  --ops-sidebar-active: #e8f2ff;
+  --ops-sidebar-active: #e8f3ff;
 }
 
 :root[data-theme="dark"] {
@@ -3395,33 +3415,41 @@ i.online,
 /* Active nav button — blue highlight for BOTH desktop and mobile */
 .nav-group button.active,
 .nav-group button[aria-current="page"],
+.nav-group button[data-nav-active="true"],
 .sidebar .nav-group button.active,
 .sidebar .nav-group button[aria-current="page"],
+.sidebar .nav-group button[data-nav-active="true"],
 [data-theme="dark"] .nav-group button.active,
 [data-theme="dark"] .nav-group button[aria-current="page"],
+[data-theme="dark"] .nav-group button[data-nav-active="true"],
 [data-theme="dark"] .sidebar .nav-group button.active,
-[data-theme="dark"] .sidebar .nav-group button[aria-current="page"] {
+[data-theme="dark"] .sidebar .nav-group button[aria-current="page"],
+[data-theme="dark"] .sidebar .nav-group button[data-nav-active="true"] {
   border-left: 0 !important;
   padding-left: 12px !important;
-  background-color: var(--ops-sidebar-active) !important;
-  background-image: none !important;
+  background: var(--ops-sidebar-active) !important;
   color: var(--ops-blue) !important;
   font-weight: 700 !important;
-  box-shadow: inset 3px 0 0 var(--ops-blue) !important;
+  box-shadow: none !important;
+}
+
+/* Explicit light-theme contract: the active card must be visible on desktop too. */
+html[data-theme="light"] .app-shell .sidebar nav .nav-group > button[data-nav-active="true"] {
+  background: #e8f3ff !important;
 }
 
 /* Keep the exact same active treatment in the desktop icon rail and mobile drawer. */
 .app-shell.sidebar-collapsed .sidebar .nav-group button:is(.active, [aria-current="page"]) {
   background-color: var(--ops-sidebar-active) !important;
   color: var(--ops-blue) !important;
-  box-shadow: inset 3px 0 0 var(--ops-blue) !important;
+  box-shadow: none !important;
 }
 
 @media (max-width: 1200px) {
   .sidebar.open .nav-group button:is(.active, [aria-current="page"]) {
     background-color: var(--ops-sidebar-active) !important;
     color: var(--ops-blue) !important;
-    box-shadow: inset 3px 0 0 var(--ops-blue) !important;
+    box-shadow: none !important;
   }
 }
 

@@ -3538,6 +3538,47 @@ export function DashboardApp() {
 
   return (
     <main className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}${eventRailOpen ? '' : ''}`}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        /* Force active sidebar styles globally */
+        .nav-group button.active,
+        .nav-group button[aria-current="page"],
+        .nav-group button[data-nav-active="true"],
+        .sidebar .nav-group button.active,
+        .sidebar .nav-group button[data-nav-active="true"] {
+          background-color: #eff6ff !important;
+          color: #2563eb !important;
+          border-left: 3px solid #3b82f6 !important;
+          padding-left: 9px !important;
+          font-weight: 700 !important;
+          box-shadow: none !important;
+        }
+        .nav-group button.active svg,
+        .nav-group button[data-nav-active="true"] svg {
+          color: #3b82f6 !important;
+        }
+        [data-theme="dark"] .nav-group button.active,
+        [data-theme="dark"] .nav-group button[data-nav-active="true"],
+        [data-theme="dark"] .sidebar .nav-group button.active,
+        [data-theme="dark"] .sidebar .nav-group button[data-nav-active="true"] {
+          background-color: rgba(59, 130, 246, 0.08) !important;
+          color: #3b82f6 !important;
+          border-left: 3px solid #3b82f6 !important;
+          padding-left: 9px !important;
+        }
+        [data-theme="dark"] .nav-group button.active svg,
+        [data-theme="dark"] .nav-group button[data-nav-active="true"] svg {
+          color: #3b82f6 !important;
+        }
+        /* Hide Next.js Dev Indicator */
+        nextjs-portal,
+        #nextjs-dev-toolbar,
+        [id^="nextjs-dev-toolbar"] {
+          display: none !important;
+          opacity: 0 !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
+      `}} />
       <button
         className={`sidebar-scrim ${sidebarOpen ? "visible" : ""}`}
         onClick={() => setSidebarOpen(false)}
@@ -3583,6 +3624,7 @@ export function DashboardApp() {
                 return (
                   <button
                     className={active === item ? "active" : ""}
+                    data-nav-active={active === item ? "true" : undefined}
                     onClick={() => navigate(item)}
                     aria-current={active === item ? "page" : undefined}
                     key={item}
