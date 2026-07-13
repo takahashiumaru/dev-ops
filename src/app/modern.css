@@ -2056,9 +2056,22 @@ i.online,
   grid-template-columns: 34px minmax(130px, 1fr) auto auto auto auto;
   gap: 9px;
   align-items: center;
-  min-height: 59px;
+  min-height: 66px;
   border-radius: 10px;
   padding: 8px;
+}
+
+.run-commit-message {
+  display: block;
+  max-width: min(38vw, 520px);
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workflow-run-row + .workflow-run-row {
@@ -3434,6 +3447,10 @@ i.online,
 
   .workflow-run-row {
     grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+
+  .workflow-run-row .run-commit-message {
+    max-width: 100%;
   }
 
   .workflow-run-row > code,

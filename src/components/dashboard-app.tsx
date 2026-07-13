@@ -105,6 +105,7 @@ type WorkflowRun = {
   event_name: string;
   branch: string | null;
   head_sha: string | null;
+  commit_message: string | null;
   run_number: number;
   status: string;
   conclusion: string | null;
@@ -1996,6 +1997,14 @@ function CiCdPage({
                     <small>
                       {run.full_name} / {run.branch ?? "-"}
                     </small>
+                    {run.commit_message ? (
+                      <small
+                        className="run-commit-message"
+                        title={run.commit_message}
+                      >
+                        {run.commit_message.split(/\r?\n/, 1)[0]}
+                      </small>
+                    ) : null}
                   </div>
                   <code>{run.head_sha?.slice(0, 7) ?? "-"}</code>
                   <Badge
@@ -2142,6 +2151,14 @@ function DeploymentsPage({
                 <p>
                   {run.workflow_name} on <code>{run.branch}</code>
                 </p>
+                {run.commit_message ? (
+                  <small
+                    className="run-commit-message"
+                    title={run.commit_message}
+                  >
+                    {run.commit_message.split(/\r?\n/, 1)[0]}
+                  </small>
+                ) : null}
               </div>
               <Badge
                 tone={

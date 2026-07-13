@@ -28,6 +28,7 @@ type RunRow = RowDataPacket & {
   event_name: string;
   branch: string | null;
   head_sha: string | null;
+  commit_message: string | null;
   run_number: number;
   status: string;
   conclusion: string | null;
@@ -136,6 +137,7 @@ export async function GET(request: Request) {
         ),
         queryRows<RunRow>(
           `SELECT r.id, r.github_id, repo.full_name, r.workflow_name, r.event_name, r.branch, r.head_sha,
+                r.commit_message,
                 r.run_number, r.status, r.conclusion, r.actor_login, r.html_url, r.started_at, r.completed_at
          FROM github_workflow_runs r
          JOIN github_repositories repo ON repo.id = r.repository_id

@@ -24,6 +24,7 @@ type GitHubWorkflowRun = {
   event: string;
   head_branch: string | null;
   head_sha: string | null;
+  head_commit?: { message?: string | null } | null;
   run_number: number;
   status: string;
   conclusion: string | null;
@@ -179,12 +180,13 @@ export async function syncGitHub() {
         for (const run of payload.workflow_runs) {
           await pool.execute(
             `INSERT INTO github_workflow_runs
-            (github_id, repository_id, workflow_name, event_name, branch, head_sha, run_number,
+            (github_id, repository_id, workflow_name, event_name, branch, head_sha, commit_message, run_number,
              status, conclusion, actor_login, html_url, started_at, completed_at, synced_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              workflow_name = VALUES(workflow_name), status = VALUES(status), conclusion = VALUES(conclusion),
-             actor_login = VALUES(actor_login), completed_at = VALUES(completed_at), synced_at = VALUES(synced_at)`,
+             commit_message = VALUES(commit_message), actor_login = VALUES(actor_login),
+             completed_at = VALUES(completed_at), synced_at = VALUES(synced_at)`,
             [
               run.id,
               repo.id,
@@ -192,6 +194,7 @@ export async function syncGitHub() {
               run.event,
               run.head_branch,
               run.head_sha,
+              run.head_commit?.message?.trim().slice(0, 4000) || null,
               run.run_number,
               run.status,
               run.conclusion,
@@ -266,18 +269,6 @@ export async function rerunGitHubWorkflow(databaseRunId: number) {
   if (run.status !== "completed") {
     throw new Error("Only completed workflow runs can be retried");
   }
-  if (
-    ![
-      "failure",
-      "cancelled",
-      "timed_out",
-      "startup_failure",
-      "action_required",
-    ].includes(run.conclusion || "")
-  ) {
-    throw new Error("Only failed or cancelled workflow runs can be retried");
-  }
-
   const [owner, repository] = run.full_name.split("/");
   if (!owner || !repository) throw new Error("Repository name is invalid");
   const mode = run.conclusion === "failure" ? "rerun-failed-jobs" : "rerun";

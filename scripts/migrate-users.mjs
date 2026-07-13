@@ -37,12 +37,38 @@ try {
   );
   await connection.changeUser({ database });
 
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      filename VARCHAR(255) NOT NULL PRIMARY KEY,
+      applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   const migrationsDirectory = join(root, "database/migrations");
   const migrations = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql")).sort();
   for (const file of migrations) {
+    const [applied] = await connection.execute(
+      "SELECT filename FROM schema_migrations WHERE filename = ? LIMIT 1",
+      [file],
+    );
+    if (applied.length) {
+      console.log(`Migration skipped: ${file}`);
+      continue;
+    }
     const migration = await readFile(join(migrationsDirectory, file), "utf8");
     const statements = migration.split(/;\s*(?:\n|$)/).map((statement) => statement.trim()).filter(Boolean);
-    for (const statement of statements) await connection.query(statement);
+    await connection.beginTransaction();
+    try {
+      for (const statement of statements) await connection.query(statement);
+      await connection.execute(
+        "INSERT INTO schema_migrations (filename) VALUES (?)",
+        [file],
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    }
     console.log(`Migration applied: ${file}`);
   }
   console.log(`Migration complete: ${database}`);
