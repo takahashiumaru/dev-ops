@@ -3,6 +3,8 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import "./modern.css";
+import "./sidebar-active.css";
+import "./login.css";
 
 export const metadata: Metadata = {
   title: "Opsdeck | Infrastructure Console",

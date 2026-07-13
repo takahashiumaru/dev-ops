@@ -628,6 +628,147 @@ i.online,
   font: 550 10px var(--mono);
 }
 
+.command-palette-layer {
+  position: fixed;
+  z-index: 70;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding: min(14vh, 120px) 20px 20px;
+}
+
+.command-palette-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 23, 42, .42);
+  backdrop-filter: blur(4px);
+}
+
+.command-palette {
+  position: relative;
+  width: min(680px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, .24);
+}
+
+.command-palette-input {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 34px;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.command-palette-input input {
+  min-width: 0;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.command-palette-input button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+}
+
+.command-results {
+  max-height: min(56vh, 510px);
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.command-results > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+  border: 0;
+  border-radius: 11px;
+  padding: 10px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.command-results > button:hover,
+.command-results > button:focus-visible {
+  background: #e8f3ff;
+  outline: none;
+}
+
+.command-result-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--ops-blue);
+}
+
+.command-results > button > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.command-results strong,
+.command-results small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-results strong { font-size: 13px; }
+.command-results small { color: var(--muted); font-size: 11px; }
+.command-results em { color: var(--faint); font-size: 9px; font-style: normal; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+
+.command-empty {
+  display: grid;
+  min-height: 190px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.command-empty svg { font-size: 26px; }
+.command-empty strong { color: var(--text); }
+
+.command-palette footer {
+  display: flex;
+  gap: 18px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.command-palette footer kbd {
+  margin-right: 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 5px;
+  background: var(--panel-2);
+}
+
+[data-theme="dark"] .command-results > button:hover,
+[data-theme="dark"] .command-results > button:focus-visible {
+  background: var(--panel-2);
+}
+
 .top-actions {
   gap: 8px;
 }
@@ -1811,6 +1952,11 @@ i.online,
   font-size: 10px;
 }
 
+[data-theme="dark"] .ci-toolbar {
+  border-color: var(--line);
+  background: var(--panel-2);
+}
+
 .ci-layout {
   grid-template-columns: minmax(340px, 0.68fr) minmax(560px, 1.32fr);
   gap: 16px;
@@ -2188,6 +2334,35 @@ i.online,
   font: 600 10px var(--condensed) !important;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.alert-audit-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.alerts-clear-state {
+  display: grid;
+  min-height: 210px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.alerts-clear-state svg {
+  color: var(--green);
+  font-size: 32px;
+}
+
+.alerts-clear-state strong {
+  color: var(--text);
+  font-size: 15px;
 }
 
 .alert-summary > div:nth-child(1) span { color: var(--blue) !important; }
@@ -3142,6 +3317,33 @@ i.online,
 }
 
 @media (max-width: 760px) {
+  .command-palette-layer {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .command-palette {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+    border-radius: 18px;
+  }
+
+  .command-results {
+    max-height: calc(100dvh - 180px);
+  }
+
+  .command-results > button {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .command-results em {
+    display: none;
+  }
+
+  .command-palette footer {
+    display: none;
+  }
+
   .app-shell {
     padding: 0;
   }
@@ -3433,9 +3635,18 @@ i.online,
   box-shadow: none !important;
 }
 
-/* Explicit light-theme contract: the active card must be visible on desktop too. */
-html[data-theme="light"] .app-shell .sidebar nav .nav-group > button[data-nav-active="true"] {
-  background: #e8f3ff !important;
+/* Final active-card contract for every sidebar mode: no dark edge or inset. */
+html .app-shell .sidebar nav .nav-group > button[data-nav-active="true"] {
+  background: var(--ops-sidebar-active) !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+html .app-shell .sidebar nav .nav-group > button[data-nav-active="true"]::before,
+html .app-shell .sidebar nav .nav-group > button[data-nav-active="true"]::after {
+  display: none !important;
+  content: none !important;
 }
 
 /* Keep the exact same active treatment in the desktop icon rail and mobile drawer. */
@@ -3448,6 +3659,8 @@ html[data-theme="light"] .app-shell .sidebar nav .nav-group > button[data-nav-ac
 @media (max-width: 1200px) {
   .sidebar.open .nav-group button:is(.active, [aria-current="page"]) {
     background-color: var(--ops-sidebar-active) !important;
+    border: 0 !important;
+    outline: 0 !important;
     color: var(--ops-blue) !important;
     box-shadow: none !important;
   }

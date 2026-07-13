@@ -339,25 +339,6 @@ export const serviceInventory = [
   },
 ] as const;
 
-export const alerts = [
-  {
-    severity: "warning" as "warning" | "critical",
-    title: "Beberapa alias domain tidak memiliki DNS",
-    source: "DNS inventory",
-    age: "Live audit",
-    detail:
-      "apsone.app, hermes.takahashiumaru.my.id, sips.takahashiumaru.my.id, dan umarmarufmutaqin.my.id tidak resolve dari publik.",
-  },
-  {
-    severity: "warning",
-    title: "Taka School terus restart",
-    source: "taka-school.service",
-    age: "User systemd",
-    detail:
-      "Service terdeteksi dalam restart loop dan belum memiliki domain/runtime mapping yang stabil.",
-  },
-] as const;
-
 export const deployments = [
   {
     project: "Opsdeck",

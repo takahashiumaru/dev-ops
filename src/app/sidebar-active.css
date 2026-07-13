@@ -1,0 +1,34 @@
+/* Single source of truth for active navigation across desktop and drawer modes. */
+html[data-theme="light"] body .app-shell .sidebar nav .nav-group > button[data-nav-active="true"],
+html[data-theme="light"] body .app-shell .sidebar nav .nav-group > button.active,
+html[data-theme="light"] body .app-shell .sidebar nav .nav-group > button[aria-current="page"] {
+  border: 0 !important;
+  outline: 0 !important;
+  background: #e8f3ff !important;
+  color: #2563eb !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] body .app-shell .sidebar nav .nav-group > button[data-nav-active="true"],
+html[data-theme="dark"] body .app-shell .sidebar nav .nav-group > button.active,
+html[data-theme="dark"] body .app-shell .sidebar nav .nav-group > button[aria-current="page"] {
+  border: 0 !important;
+  outline: 0 !important;
+  background: rgba(59, 130, 246, 0.14) !important;
+  color: #3b82f6 !important;
+  box-shadow: none !important;
+}
+
+html body .app-shell .sidebar nav .nav-group > button[data-nav-active="true"] svg,
+html body .app-shell .sidebar nav .nav-group > button.active svg,
+html body .app-shell .sidebar nav .nav-group > button[aria-current="page"] svg {
+  color: #3b82f6 !important;
+}
+
+html body .app-shell .sidebar nav .nav-group > button[data-nav-active="true"]::before,
+html body .app-shell .sidebar nav .nav-group > button[data-nav-active="true"]::after,
+html body .app-shell .sidebar nav .nav-group > button.active::before,
+html body .app-shell .sidebar nav .nav-group > button.active::after {
+  display: none !important;
+  content: none !important;
+}

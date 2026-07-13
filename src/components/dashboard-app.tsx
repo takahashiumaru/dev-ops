@@ -48,7 +48,6 @@ import {
   XCircle,
 } from "@phosphor-icons/react";
 import {
-  alerts,
   deliveryWorkflowRepositories,
   deployments,
   navGroups,
@@ -57,6 +56,14 @@ import {
   serviceInventory,
   type ModuleName,
 } from "@/lib/dashboard-data";
+
+type InfrastructureAlert = {
+  severity: "warning" | "critical";
+  title: string;
+  source: string;
+  age: string;
+  detail: string;
+};
 
 export type SessionUser = {
   id: number;
@@ -882,6 +889,7 @@ function TelemetryChart({
 function TacticalOverviewPage({
   data,
   live,
+  alerts,
   liveError,
   onNavigate,
   onOpenLogs,
@@ -890,6 +898,7 @@ function TacticalOverviewPage({
 }: {
   data: DashboardData | null;
   live: LiveData | null;
+  alerts: InfrastructureAlert[];
   liveError: string;
   onNavigate: (page: ModuleName) => void;
   onOpenLogs: (projectId: string) => void;
@@ -1091,7 +1100,11 @@ function TacticalOverviewPage({
               <Warning />
               <div>
                 <strong>{alerts.length} ACTIVE SIGNALS</strong>
-                <span>1 upstream offline / DNS gaps / restart loop</span>
+                <span>
+                  {alerts.length
+                    ? alerts.map((alert) => alert.source).join(" / ")
+                    : "DNS and monitored services are healthy"}
+                </span>
               </div>
             </div>
           </div>
@@ -2571,7 +2584,17 @@ function ProjectLogsPage({
   );
 }
 
-function AlertsPage() {
+function AlertsPage({
+  alerts,
+  onRefresh,
+  refreshing,
+  checkedAt,
+}: {
+  alerts: InfrastructureAlert[];
+  onRefresh: () => void;
+  refreshing: boolean;
+  checkedAt: string | null;
+}) {
   const [acknowledged, setAcknowledged] = useState<Set<string>>(
     () => new Set(),
   );
@@ -2592,13 +2615,20 @@ function AlertsPage() {
             <strong>Open signals</strong>
           </div>
           <div>
-            <span>1</span>
+            <span>{alerts.filter((alert) => alert.severity === "critical").length}</span>
             <strong>Critical</strong>
           </div>
           <div>
-            <span>2</span>
+            <span>{alerts.filter((alert) => alert.severity === "warning").length}</span>
             <strong>Warning</strong>
           </div>
+        </div>
+        <div className="alert-audit-toolbar">
+          <span>{checkedAt ? `Last checked ${timeAgo(checkedAt)}` : "Audit not checked yet"}</span>
+          <button className="quiet-button" onClick={onRefresh} disabled={refreshing}>
+            <ArrowClockwise className={refreshing ? "spin" : ""} />
+            {refreshing ? "Checking…" : "Refresh audit"}
+          </button>
         </div>
         {alerts.map((alert) => (
           <article
@@ -2630,6 +2660,13 @@ function AlertsPage() {
             </button>
           </article>
         ))}
+        {!alerts.length ? (
+          <div className="panel alerts-clear-state">
+            <CheckCircle />
+            <strong>No active infrastructure alerts</strong>
+            <span>DNS aliases resolve and the monitored service is active.</span>
+          </div>
+        ) : null}
       </section>
       <aside className="panel thresholds">
         <div className="panel-heading">
@@ -2864,11 +2901,13 @@ function SettingsPage({
 function EventRail({
   data,
   live,
+  alerts,
   stale,
   onOpenLogs,
 }: {
   data: DashboardData | null;
   live: LiveData | null;
+  alerts: InfrastructureAlert[];
   stale: boolean;
   onOpenLogs: (projectId: string) => void;
 }) {
@@ -3051,6 +3090,15 @@ function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) => void }) {
       </section>
       <section className="login-form-wrap">
         <form onSubmit={submit}>
+          <div className="login-form-brand">
+            <span className="brand-mark">
+              <img src="/icon.svg" alt="" aria-hidden="true" />
+            </span>
+            <div>
+              <strong>Opsdeck</strong>
+              <small>Infrastructure console</small>
+            </div>
+          </div>
           <div>
             <span className="eyebrow">Operator access</span>
             <h2>Sign in to Opsdeck</h2>
@@ -3066,6 +3114,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) => void }) {
               onChange={(event) => setEmail(event.target.value)}
               type="email"
               autoComplete="email"
+              placeholder="operator@example.com"
               required
             />
           </label>
@@ -3076,6 +3125,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) => void }) {
               onChange={(event) => setPassword(event.target.value)}
               type="password"
               autoComplete="current-password"
+              placeholder="Enter your password"
               required
             />
           </label>
@@ -3109,8 +3159,11 @@ export function DashboardApp() {
   const [live, setLive] = useState<LiveData | null>(null);
   const [liveError, setLiveError] = useState("");
   const [liveLoading, setLiveLoading] = useState(false);
+  const [dnsAudit, setDnsAudit] = useState<{ unresolvedDomains: string[]; checkedAt: string } | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [eventRailOpen, setEventRailOpen] = useState(false);
@@ -3145,6 +3198,79 @@ export function DashboardApp() {
   const liveRequest = useRef<AbortController | null>(null);
   const meta = pageMeta[active];
   const NavIcon = icons[active];
+  const activeAlerts = useMemo<InfrastructureAlert[]>(() => {
+    const next: InfrastructureAlert[] = [];
+    if (dnsAudit?.unresolvedDomains.length) {
+      next.push({
+        severity: "warning",
+        title: "Beberapa alias domain tidak memiliki DNS",
+        source: "DNS inventory",
+        age: "Live audit",
+        detail: `${dnsAudit.unresolvedDomains.join(", ")} tidak resolve dari publik.`,
+      });
+    }
+    const schoolStatus = live?.services.find((service) => service.name === "taka-school.service")?.status;
+    if (schoolStatus && schoolStatus !== "active") {
+      next.push({
+        severity: schoolStatus === "failed" ? "critical" : "warning",
+        title: "Taka School membutuhkan perhatian",
+        source: "taka-school.service",
+        age: "Live systemd",
+        detail: `Status service terbaru: ${schoolStatus}. Alert akan hilang otomatis setelah service kembali active.`,
+      });
+    }
+    return next;
+  }, [dnsAudit, live]);
+
+  const searchResults = useMemo(() => {
+    const query = globalSearch.trim().toLowerCase();
+    const menuResults = navGroups.flatMap((group) =>
+      group.items.map((item) => ({
+        id: `menu-${item}`,
+        type: "Menu",
+        title: item,
+        detail: pageMeta[item].description,
+        page: item as ModuleName,
+        query: "",
+      })),
+    );
+    const projectResults = projects.map((project) => ({
+      id: `project-${project.id}`,
+      type: "Project",
+      title: project.name,
+      detail: `${project.domain} · ${project.runtime}`,
+      page: "Projects" as ModuleName,
+      query: project.name,
+    }));
+    const serviceResults = serviceInventory.map((service) => ({
+      id: `service-${service.name}`,
+      type: "Service",
+      title: service.name,
+      detail: `${service.kind} · ${service.project}`,
+      page: "Services" as ModuleName,
+      query: service.name,
+    }));
+    const repositoryResults = (data?.repositories ?? []).map((repository) => ({
+      id: `repository-${repository.id}`,
+      type: "Repository",
+      title: repository.full_name,
+      detail: repository.description || `${repository.language ?? "Repository"} · ${repository.default_branch}`,
+      page: "CI/CD" as ModuleName,
+      query: repository.full_name,
+    }));
+    const allResults = [
+      ...menuResults,
+      ...projectResults,
+      ...serviceResults,
+      ...repositoryResults,
+    ];
+    if (!query) return allResults.slice(0, 10);
+    return allResults
+      .filter((item) =>
+        `${item.title} ${item.detail} ${item.type}`.toLowerCase().includes(query),
+      )
+      .slice(0, 12);
+  }, [data?.repositories, globalSearch]);
 
   const navigate = useCallback((page: ModuleName) => {
     setActive(page);
@@ -3155,6 +3281,15 @@ export function DashboardApp() {
       window.history.pushState(null, "", nextHash);
     }
   }, []);
+
+  const selectSearchResult = useCallback(
+    (result: (typeof searchResults)[number]) => {
+      setGlobalSearch(result.query);
+      setSearchOpen(false);
+      navigate(result.page);
+    },
+    [navigate, searchResults],
+  );
 
   const loadData = useCallback(async () => {
     dataRequest.current?.abort();
@@ -3216,6 +3351,24 @@ export function DashboardApp() {
     }
   }, []);
 
+  const loadAlertAudit = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const response = await fetch("/api/alerts/audit", { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Unable to refresh audit");
+      setDnsAudit(payload);
+    } catch (error) {
+      setDataError(error instanceof Error ? error.message : "Unable to refresh audit");
+    } finally {
+      setAuditLoading(false);
+    }
+  }, []);
+
+  const refreshInfrastructureAudit = useCallback(() => {
+    void Promise.all([loadAlertAudit(), loadLive(), loadData()]);
+  }, [loadAlertAudit, loadLive, loadData]);
+
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/me", { cache: "no-store" })
@@ -3237,8 +3390,11 @@ export function DashboardApp() {
   }, []);
 
   useEffect(() => {
-    if (user) loadData();
-  }, [user, loadData]);
+    if (user) {
+      loadData();
+      loadAlertAudit();
+    }
+  }, [user, loadData, loadAlertAudit]);
 
   useEffect(() => {
     function readNavigation() {
@@ -3285,6 +3441,7 @@ export function DashboardApp() {
       if (event.key !== "Escape") return;
       setSidebarOpen(false);
       setEventRailOpen(false);
+      setSearchOpen(false);
     }
     document.addEventListener("keydown", closeDrawers);
     return () => document.removeEventListener("keydown", closeDrawers);
@@ -3294,6 +3451,7 @@ export function DashboardApp() {
     function focusSearch(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        setSearchOpen(true);
         searchInput.current?.focus();
       }
     }
@@ -3456,6 +3614,7 @@ export function DashboardApp() {
       <TacticalOverviewPage
         data={data}
         live={live}
+        alerts={activeAlerts}
         liveError={liveError}
         onNavigate={navigate}
         onOpenLogs={openProjectLogs}
@@ -3522,7 +3681,14 @@ export function DashboardApp() {
       />
     );
   } else if (active === "Alerts") {
-    page = <AlertsPage />;
+    page = (
+      <AlertsPage
+        alerts={activeAlerts}
+        onRefresh={refreshInfrastructureAudit}
+        refreshing={auditLoading || liveLoading || dataLoading}
+        checkedAt={dnsAudit?.checkedAt ?? live?.checkedAt ?? null}
+      />
+    );
   } else {
     page = (
       <SettingsPage
@@ -3538,47 +3704,6 @@ export function DashboardApp() {
 
   return (
     <main className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}${eventRailOpen ? '' : ''}`}>
-      <style dangerouslySetInnerHTML={{ __html: `
-        /* Force active sidebar styles globally */
-        .nav-group button.active,
-        .nav-group button[aria-current="page"],
-        .nav-group button[data-nav-active="true"],
-        .sidebar .nav-group button.active,
-        .sidebar .nav-group button[data-nav-active="true"] {
-          background-color: #eff6ff !important;
-          color: #2563eb !important;
-          border-left: 3px solid #3b82f6 !important;
-          padding-left: 9px !important;
-          font-weight: 700 !important;
-          box-shadow: none !important;
-        }
-        .nav-group button.active svg,
-        .nav-group button[data-nav-active="true"] svg {
-          color: #3b82f6 !important;
-        }
-        [data-theme="dark"] .nav-group button.active,
-        [data-theme="dark"] .nav-group button[data-nav-active="true"],
-        [data-theme="dark"] .sidebar .nav-group button.active,
-        [data-theme="dark"] .sidebar .nav-group button[data-nav-active="true"] {
-          background-color: rgba(59, 130, 246, 0.08) !important;
-          color: #3b82f6 !important;
-          border-left: 3px solid #3b82f6 !important;
-          padding-left: 9px !important;
-        }
-        [data-theme="dark"] .nav-group button.active svg,
-        [data-theme="dark"] .nav-group button[data-nav-active="true"] svg {
-          color: #3b82f6 !important;
-        }
-        /* Hide Next.js Dev Indicator */
-        nextjs-portal,
-        #nextjs-dev-toolbar,
-        [id^="nextjs-dev-toolbar"] {
-          display: none !important;
-          opacity: 0 !important;
-          visibility: hidden !important;
-          pointer-events: none !important;
-        }
-      `}} />
       <button
         className={`sidebar-scrim ${sidebarOpen ? "visible" : ""}`}
         onClick={() => setSidebarOpen(false)}
@@ -3631,7 +3756,7 @@ export function DashboardApp() {
                   >
                     <Icon size={18} />
                     <span>{item}</span>
-                    {item === "Alerts" ? <b>{alerts.length}</b> : null}
+                    {item === "Alerts" && activeAlerts.length ? <b>{activeAlerts.length}</b> : null}
                   </button>
                 );
               })}
@@ -3640,7 +3765,7 @@ export function DashboardApp() {
         </nav>
         <div className="sidebar-recent">
           <p>Recent signals</p>
-          {alerts.slice(0, 2).map((alert) => (
+          {activeAlerts.slice(0, 2).map((alert) => (
             <button key={alert.title} onClick={() => navigate("Alerts")}>
               <span className={`signal-mark ${alert.severity}`}>
                 <Warning />
@@ -3689,9 +3814,16 @@ export function DashboardApp() {
             <input
               ref={searchInput}
               value={globalSearch}
-              onChange={(event) => setGlobalSearch(event.target.value)}
+              onFocus={() => setSearchOpen(true)}
+              onChange={(event) => {
+                setGlobalSearch(event.target.value);
+                setSearchOpen(true);
+              }}
               onKeyDown={(event) => {
-                if (event.key === "Enter") navigate("Projects");
+                if (event.key === "Enter" && searchResults[0]) {
+                  event.preventDefault();
+                  selectSearchResult(searchResults[0]);
+                }
               }}
               placeholder="Search projects, domains, services..."
               aria-label="Search projects, domains, and services"
@@ -3726,10 +3858,68 @@ export function DashboardApp() {
               aria-expanded={eventRailOpen}
             >
               <Bell />
-              {alerts.length ? <b className="notification-count">{alerts.length}</b> : null}
+              {activeAlerts.length ? <b className="notification-count">{activeAlerts.length}</b> : null}
             </button>
           </div>
         </header>
+        {searchOpen ? (
+          <div className="command-palette-layer" role="presentation">
+            <button
+              className="command-palette-scrim"
+              onClick={() => setSearchOpen(false)}
+              aria-label="Close search"
+            />
+            <section className="command-palette" role="dialog" aria-modal="true" aria-label="Search Opsdeck">
+              <div className="command-palette-input">
+                <MagnifyingGlass />
+                <input
+                  value={globalSearch}
+                  onChange={(event) => setGlobalSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && searchResults[0]) {
+                      event.preventDefault();
+                      selectSearchResult(searchResults[0]);
+                    }
+                  }}
+                  placeholder="Search menus, projects, domains, services, repositories..."
+                  autoFocus
+                />
+                <button onClick={() => setSearchOpen(false)} aria-label="Close search">
+                  <X />
+                </button>
+              </div>
+              <div className="command-results" role="listbox">
+                {searchResults.length ? searchResults.map((result) => (
+                  <button
+                    key={result.id}
+                    role="option"
+                    aria-selected="false"
+                    onClick={() => selectSearchResult(result)}
+                  >
+                    <span className="command-result-icon">
+                      {result.type === "Menu" ? <SquaresFour /> : result.type === "Project" ? <Stack /> : result.type === "Service" ? <Pulse /> : <GitBranch />}
+                    </span>
+                    <span>
+                      <strong>{result.title}</strong>
+                      <small>{result.detail}</small>
+                    </span>
+                    <em>{result.type}</em>
+                  </button>
+                )) : (
+                  <div className="command-empty">
+                    <MagnifyingGlass />
+                    <strong>No results found</strong>
+                    <span>Try a project, domain, service, repository, or menu name.</span>
+                  </div>
+                )}
+              </div>
+              <footer>
+                <span><kbd>Enter</kbd> open first result</span>
+                <span><kbd>Esc</kbd> close</span>
+              </footer>
+            </section>
+          </div>
+        ) : null}
         <div className="workspace-content">
           <header className="page-header">
             <div className="page-title-icon">
@@ -3786,6 +3976,7 @@ export function DashboardApp() {
         <EventRail
           data={data}
           live={live}
+          alerts={activeAlerts}
           stale={Boolean(liveError)}
           onOpenLogs={openProjectLogs}
         />
