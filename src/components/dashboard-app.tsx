@@ -2018,14 +2018,7 @@ function CiCdPage({
                     >
                       <ArrowSquareOut />
                     </a>
-                    {canRerun &&
-                    [
-                      "failure",
-                      "cancelled",
-                      "timed_out",
-                      "startup_failure",
-                      "action_required",
-                    ].includes(run.conclusion || "") ? (
+                    {canRerun && Boolean(run.conclusion) ? (
                       <button
                         onClick={() => onRerun(run)}
                         aria-label={`Retry ${run.workflow_name}`}
@@ -2161,14 +2154,7 @@ function DeploymentsPage({
                 {run.conclusion ?? run.status}
               </Badge>
               <time>{timeAgo(run.started_at)}</time>
-              {canRerun &&
-              [
-                "failure",
-                "cancelled",
-                "timed_out",
-                "startup_failure",
-                "action_required",
-              ].includes(run.conclusion || "") ? (
+              {canRerun && Boolean(run.conclusion) ? (
                 <button
                   className="row-action action-primary"
                   onClick={() => onRerun(run)}
