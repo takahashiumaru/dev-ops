@@ -1,0 +1,44 @@
+/* Keep sidebar scrolling on its own compositor layer and minimize repaints. */
+.sidebar {
+  contain: layout paint;
+}
+
+.sidebar nav {
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
+}
+
+@media (max-width: 1200px) {
+  .sidebar {
+    transform: translate3d(calc(-100% - 24px), 0, 0);
+    will-change: transform;
+    backface-visibility: hidden;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, .14);
+  }
+
+  .sidebar.open {
+    transform: translate3d(0, 0, 0);
+  }
+
+  .sidebar nav {
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    contain: layout paint style;
+    scrollbar-width: thin;
+  }
+
+  .sidebar-scrim {
+    backdrop-filter: none !important;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .sidebar .nav-group button,
+  .sidebar .sidebar-recent button {
+    transition: none !important;
+  }
+}

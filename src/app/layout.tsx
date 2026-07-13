@@ -4,6 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import "./modern.css";
 import "./sidebar-active.css";
+import "./sidebar-performance.css";
 import "./login.css";
 
 export const metadata: Metadata = {
