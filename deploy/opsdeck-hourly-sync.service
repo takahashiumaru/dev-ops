@@ -1,0 +1,12 @@
+[Unit]
+Description=Opsdeck hourly GitHub and VPS synchronization
+After=network-online.target dev-ops-dashboard.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+EnvironmentFile=/home/ubuntu/dev-ops-dashboard/.env
+ExecStart=/bin/sh -c '/usr/bin/curl --fail --silent --show-error --max-time 900 --request POST --header "Authorization: Bearer ${HOURLY_SYNC_SECRET}" http://127.0.0.1:3005/api/internal/hourly-sync'
+Nice=10
+IOSchedulingClass=idle

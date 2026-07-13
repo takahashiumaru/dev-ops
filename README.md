@@ -34,9 +34,12 @@ Migrations create authentication, GitHub cache, sync history, metric snapshots, 
 - `APP_ORIGIN` (exact public origin, for example `https://dev-ops.example.com`)
 - `VPS_HOST`, `VPS_PORT`, `VPS_PASSWORD`
 - `VPS_HOST_FINGERPRINTS` (comma-separated SHA-256 hex host-key digests)
+- `HOURLY_SYNC_SECRET` (generated automatically during deployment)
 - Optional: `VPS_USER` (defaults to `ubuntu`), `VPS_NAME`, `DOCKER_ACTION_ALLOWLIST`
 
 ## Deployment
 
 The GitHub workflow builds an immutable release, installs production dependencies inside that release, applies migrations, switches the `current` symlink atomically, and performs local plus public health checks. If the new service fails its local health check, the workflow restores the previous release.
+
+`opsdeck-hourly-sync.timer` refreshes the GitHub cache and captures a VPS metrics/service/container snapshot every hour. The job uses low CPU and idle I/O priority and runs without an open browser.
 # dev-ops

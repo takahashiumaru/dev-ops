@@ -59,6 +59,11 @@ jobs:
             mkdir -p "$RELEASE"
             tar -xzf "$UPLOAD" -C "$RELEASE"
 
+            if ! grep -q '^HOURLY_SYNC_SECRET=' "$ROOT/.env"; then
+              umask 077
+              echo "HOURLY_SYNC_SECRET=$(openssl rand -hex 32)" >> "$ROOT/.env"
+            fi
+
             sudo docker run --rm --network host --user 1000:1000 \
               --env-file "$ROOT/.env" -e npm_config_cache=/tmp/npm-cache \
               -v "$RELEASE:/app" -w /app node:20-bookworm-slim npm ci --omit=dev
@@ -72,6 +77,12 @@ jobs:
             sudo install -o root -g root -m 0644 \
               "$RELEASE/deploy/dev-ops-dashboard.service" \
               /etc/systemd/system/dev-ops-dashboard.service
+            sudo install -o root -g root -m 0644 \
+              "$RELEASE/deploy/opsdeck-hourly-sync.service" \
+              /etc/systemd/system/opsdeck-hourly-sync.service
+            sudo install -o root -g root -m 0644 \
+              "$RELEASE/deploy/opsdeck-hourly-sync.timer" \
+              /etc/systemd/system/opsdeck-hourly-sync.timer
             sudo systemctl daemon-reload
             systemctl --user disable --now opsdeck.service || true
 
@@ -104,6 +115,8 @@ jobs:
               fi
               exit 1
             fi
+
+            sudo systemctl enable --now opsdeck-hourly-sync.timer
 
             rm -rf "$ROOT/incoming/${{ github.sha }}"
             find "$ROOT/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \

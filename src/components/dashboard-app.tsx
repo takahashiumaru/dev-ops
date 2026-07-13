@@ -23,6 +23,8 @@ import {
   Database,
   DesktopTower,
   FileText,
+  Eye,
+  EyeSlash,
   Gear,
   GitBranch,
   GithubLogo,
@@ -3014,19 +3016,19 @@ function SettingsPage({
             <div>
               <strong>GitHub repositories</strong>
               <span>MySQL</span>
-              <span>Manual / scheduled 5-15 min</span>
+              <span>Automatic every hour / manual</span>
               <span>Latest state</span>
             </div>
             <div>
               <strong>Workflow runs</strong>
               <span>MySQL</span>
-              <span>Webhook or scheduled</span>
+              <span>Automatic every hour</span>
               <span>90 days</span>
             </div>
             <div>
               <strong>CPU / RAM / disk</strong>
               <span>VPS live</span>
-              <span>15-30 sec on active page</span>
+              <span>Live on active page / hourly snapshot</span>
               <span>Downsample 30 days</span>
             </div>
             <div>
@@ -3271,6 +3273,7 @@ function EventRail({
 function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -3361,14 +3364,21 @@ function LoginScreen({ onLogin }: { onLogin: (user: SessionUser) => void }) {
           </label>
           <label>
             Password
-            <input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              required
-            />
+            <span className="login-password-field">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                required
+              />
+              <button type="button" onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}>
+                {showPassword ? <EyeSlash /> : <Eye />}
+              </button>
+            </span>
           </label>
           {error ? (
             <p className="form-error">
@@ -3713,6 +3723,17 @@ export function DashboardApp() {
       ]),
     [],
   );
+
+  useEffect(() => {
+    if (!user) return;
+    const refreshHourlyCache = () => {
+      if (document.hidden) return;
+      void loadData();
+      if (livePages.has(active)) void loadLive(true);
+    };
+    const interval = window.setInterval(refreshHourlyCache, 60 * 60_000);
+    return () => window.clearInterval(interval);
+  }, [active, livePages, loadData, loadLive, user]);
 
   useEffect(() => {
     if (!user || !livePages.has(active)) return;
