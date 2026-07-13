@@ -8,6 +8,7 @@ import "./sidebar-performance.css";
 import "./login.css";
 import "./logout-dialog.css";
 import "./event-rail-overlay.css";
+import "./live-log.css";
 
 export const metadata: Metadata = {
   title: "Opsdeck | Infrastructure Console",

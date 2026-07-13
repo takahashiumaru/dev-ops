@@ -4,6 +4,7 @@ import {
   FormEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -2375,11 +2376,18 @@ function ProjectLogsPage({
     ? lines.filter((line) => line.toLowerCase().includes(search.toLowerCase()))
     : lines;
 
-  useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
-  }, [lines, visibleLines]);
+  const scrollToLatest = useCallback(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    body.scrollTop = body.scrollHeight;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!follow) return;
+    scrollToLatest();
+    const frame = window.requestAnimationFrame(scrollToLatest);
+    return () => window.cancelAnimationFrame(frame);
+  }, [follow, lines.length, search, scrollToLatest]);
 
   function selectProject(project: (typeof projects)[number]) {
     setSource("project");
@@ -2530,10 +2538,11 @@ function ProjectLogsPage({
           )}
           <button onClick={copyLogs}>COPY</button>
           <button onClick={exportLogs}>EXPORT</button>
+          <button className="latest-log-button" onClick={scrollToLatest}>↓ LATEST</button>
         </div>
         <div className="terminal-head">
           <span>
-            <i /> {follow ? "LIVE FOLLOW / 5S" : "PAUSED"} /{" "}
+            <i /> {follow ? "LIVE FOLLOW / 30S" : "PAUSED"} /{" "}
             {metadata.streamLabel ?? stream.toUpperCase()}
           </span>
           <time>
