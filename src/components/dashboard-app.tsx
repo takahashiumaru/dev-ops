@@ -13,6 +13,7 @@ import {
   ArrowClockwise,
   ArrowSquareOut,
   Bell,
+  CaretLeft,
   CheckCircle,
   ClockCounterClockwise,
   Code,
@@ -3111,6 +3112,7 @@ export function DashboardApp() {
   const [syncing, setSyncing] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [eventRailOpen, setEventRailOpen] = useState(false);
   const [themeReady, setThemeReady] = useState(false);
   const [metricRange, setMetricRange] = useState<"recent" | "day" | "week" | "month">("recent");
@@ -3535,7 +3537,7 @@ export function DashboardApp() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}${eventRailOpen ? '' : ''}`}>
       <button
         className={`sidebar-scrim ${sidebarOpen ? "visible" : ""}`}
         onClick={() => setSidebarOpen(false)}
@@ -3631,6 +3633,14 @@ export function DashboardApp() {
             aria-expanded={sidebarOpen}
           >
             <List />
+          </button>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed((prev) => !prev)}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <CaretLeft />
           </button>
           <label className="global-search">
             <MagnifyingGlass />
