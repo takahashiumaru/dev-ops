@@ -5,15 +5,39 @@ import { getLiveServerData } from "@/lib/server-live";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+const globalLive = globalThis as typeof globalThis & {
+  __opsLiveCache?: {
+    data?: Awaited<ReturnType<typeof getLiveServerData>>;
+    expiresAt?: number;
+    pending?: Promise<Awaited<ReturnType<typeof getLiveServerData>>>;
+  };
+};
+
+async function readLiveData(force = false) {
+  globalLive.__opsLiveCache ??= {};
+  const cache = globalLive.__opsLiveCache;
+  if (!force && cache.data && (cache.expiresAt ?? 0) > Date.now()) {
+    return { data: cache.data, fresh: false };
+  }
+  cache.pending ??= getLiveServerData().finally(() => {
+    cache.pending = undefined;
+  });
+  const data = await cache.pending;
+  cache.data = data;
+  cache.expiresAt = Date.now() + 15_000;
+  return { data, fresh: true };
+}
+
+export async function GET(request: Request) {
   const user = await getSessionUser();
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const data = await getLiveServerData();
+    const force = new URL(request.url).searchParams.get("refresh") === "1";
+    const { data, fresh } = await readLiveData(force);
     const serverKey = process.env.VPS_NAME || data.hostname;
-    getPool()
+    if (fresh) getPool()
       .execute(
         `INSERT INTO server_metric_snapshots
           (server_key, cpu_percent, memory_percent, swap_percent, disk_percent, load_1m, load_5m, load_15m, captured_at)

@@ -11,35 +11,62 @@ const auditedDomains = [
   "umarmarufmutaqin.my.id",
 ];
 
+type AuditPayload = {
+  unresolvedDomains: string[];
+  checks: Array<{ domain: string; resolved: boolean }>;
+  checkedAt: string;
+};
+
+const globalAudit = globalThis as typeof globalThis & {
+  __opsDnsAudit?: { payload?: AuditPayload; expiresAt?: number; pending?: Promise<AuditPayload> };
+};
+
 async function resolvesPublicly(domain: string) {
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("DNS lookup timed out")), 5_000),
-  );
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<boolean>((resolve) => {
+    timeoutId = setTimeout(() => resolve(false), 5_000);
+  });
   const lookup = Promise.any([
     resolve4(domain).then((records) => records.length > 0),
     resolve6(domain).then((records) => records.length > 0),
     resolveCname(domain).then((records) => records.length > 0),
   ]).catch(() => false);
-  return Promise.race([lookup, timeout]).catch(() => false);
+  return Promise.race([lookup, timeout])
+    .catch(() => false)
+    .finally(() => timeoutId && clearTimeout(timeoutId));
 }
 
-export async function GET() {
+async function runAudit(): Promise<AuditPayload> {
+  const checks = await Promise.all(
+    auditedDomains.map(async (domain) => ({ domain, resolved: await resolvesPublicly(domain) })),
+  );
+  return {
+    unresolvedDomains: checks.filter((item) => !item.resolved).map((item) => item.domain),
+    checks,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+export async function GET(request: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const checks = await Promise.all(
-    auditedDomains.map(async (domain) => ({
-      domain,
-      resolved: await resolvesPublicly(domain),
-    })),
-  );
+  const force = new URL(request.url).searchParams.get("refresh") === "1";
+  globalAudit.__opsDnsAudit ??= {};
+  const cache = globalAudit.__opsDnsAudit;
+  if (!force && cache.payload && (cache.expiresAt ?? 0) > Date.now()) {
+    return NextResponse.json(cache.payload, { headers: { "Cache-Control": "private, max-age=60" } });
+  }
+
+  cache.pending ??= runAudit().finally(() => {
+    cache.pending = undefined;
+  });
+  const payload = await cache.pending;
+  cache.payload = payload;
+  cache.expiresAt = Date.now() + 5 * 60_000;
 
   return NextResponse.json(
-    {
-      unresolvedDomains: checks.filter((item) => !item.resolved).map((item) => item.domain),
-      checks,
-      checkedAt: new Date().toISOString(),
-    },
+    payload,
     { headers: { "Cache-Control": "no-store" } },
   );
 }

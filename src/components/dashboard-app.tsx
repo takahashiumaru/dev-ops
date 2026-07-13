@@ -2377,7 +2377,7 @@ function ProjectLogsPage({
     const refresh = () => {
       if (!document.hidden && !logRequest.current) load();
     };
-    const interval = window.setInterval(refresh, 10_000);
+    const interval = window.setInterval(refresh, 30_000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       window.clearInterval(interval);
@@ -3321,14 +3321,14 @@ export function DashboardApp() {
     }
   }, [metricRange]);
 
-  const loadLive = useCallback(async () => {
+  const loadLive = useCallback(async (force = false) => {
     if (liveRequest.current || document.hidden) return;
     const controller = new AbortController();
     liveRequest.current = controller;
     const timeout = window.setTimeout(() => controller.abort(), 18_000);
     setLiveLoading(true);
     try {
-      const response = await fetch("/api/vps/live", {
+      const response = await fetch(`/api/vps/live${force ? "?refresh=1" : ""}`, {
         cache: "no-store",
         signal: controller.signal,
       });
@@ -3351,10 +3351,10 @@ export function DashboardApp() {
     }
   }, []);
 
-  const loadAlertAudit = useCallback(async () => {
+  const loadAlertAudit = useCallback(async (force = false) => {
     setAuditLoading(true);
     try {
-      const response = await fetch("/api/alerts/audit", { cache: "no-store" });
+      const response = await fetch(`/api/alerts/audit${force ? "?refresh=1" : ""}`, { cache: "no-store" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Unable to refresh audit");
       setDnsAudit(payload);
@@ -3366,7 +3366,7 @@ export function DashboardApp() {
   }, []);
 
   const refreshInfrastructureAudit = useCallback(() => {
-    void Promise.all([loadAlertAudit(), loadLive(), loadData()]);
+    void Promise.all([loadAlertAudit(true), loadLive(true), loadData()]);
   }, [loadAlertAudit, loadLive, loadData]);
 
   useEffect(() => {
@@ -3479,7 +3479,7 @@ export function DashboardApp() {
     refresh();
     const interval = window.setInterval(
       refresh,
-      active === "Overview" ? 30_000 : 20_000,
+      active === "Overview" ? 60_000 : 45_000,
     );
     document.addEventListener("visibilitychange", refresh);
     return () => {
@@ -3530,7 +3530,7 @@ export function DashboardApp() {
         message: payload.message || "Action accepted",
         auditId: payload.auditId,
       });
-      await Promise.all([loadData(), loadLive()]);
+      await Promise.all([loadData(), loadLive(true)]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Action failed";
       setOperationError(message);
@@ -3627,7 +3627,7 @@ export function DashboardApp() {
       <ServersPage
         live={live}
         error={liveError}
-        refresh={loadLive}
+        refresh={() => loadLive(true)}
         refreshing={liveLoading}
         onOperation={openOperation}
         canReboot={user.role === "owner"}
@@ -3949,7 +3949,7 @@ export function DashboardApp() {
               {!live ? (
                 <button
                   className="quiet-button"
-                  onClick={loadLive}
+                  onClick={() => loadLive(true)}
                   disabled={liveLoading}
                 >
                   <ArrowClockwise className={liveLoading ? "spin" : ""} />
