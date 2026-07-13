@@ -1514,7 +1514,7 @@ function ServicesPage({
                         Logs
                       </button>
                       {canOperate ? (
-                        status === "active" ? (
+                        status !== "inactive" && status !== "failed" ? (
                           <>
                             <button
                               className="row-action action-primary"
@@ -1533,7 +1533,7 @@ function ServicesPage({
                               </button>
                             ) : null}
                           </>
-                        ) : status === "inactive" || status === "failed" ? (
+                        ) : (
                           <button
                             className="row-action action-primary"
                             onClick={() => openServiceAction("start")}
@@ -1541,10 +1541,6 @@ function ServicesPage({
                           >
                             <Play /> Start
                           </button>
-                        ) : (
-                          <span className="action-status-note">
-                            Refresh status
-                          </span>
                         )
                       ) : null}
                     </div>
@@ -2220,6 +2216,14 @@ function LogsPage({
       setLoading(false);
     }
   }, [source, target]);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    }
+  }, [lines]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -2260,7 +2264,7 @@ function LogsPage({
         </span>
         <Badge tone="success">REDACTED SOURCE</Badge>
       </div>
-      <div className="terminal-body">
+      <div className="terminal-body" ref={bodyRef}>
         {error ? (
           <div className="terminal-error">{error}</div>
         ) : lines.length ? (
@@ -2309,6 +2313,7 @@ function ProjectLogsPage({
     checkedAt?: string;
   }>({});
   const logRequest = useRef<AbortController | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const selectedProject = projects.find((project) => project.id === target);
 
   const load = useCallback(async () => {
@@ -2369,6 +2374,12 @@ function ProjectLogsPage({
   const visibleLines = search
     ? lines.filter((line) => line.toLowerCase().includes(search.toLowerCase()))
     : lines;
+
+  useEffect(() => {
+    if (bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    }
+  }, [lines, visibleLines]);
 
   function selectProject(project: (typeof projects)[number]) {
     setSource("project");
@@ -2529,7 +2540,7 @@ function ProjectLogsPage({
             {metadata.checkedAt ? timeAgo(metadata.checkedAt) : "pending"}
           </time>
         </div>
-        <div className="terminal-body tactical-terminal">
+        <div className="terminal-body tactical-terminal" ref={bodyRef}>
           {error ? (
             <div className="terminal-error">{error}</div>
           ) : visibleLines.length ? (
