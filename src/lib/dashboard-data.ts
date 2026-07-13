@@ -225,23 +225,7 @@ export const projects = [
     commit: "unmanaged",
     logStreams: ["access", "error"],
   },
-  {
-    id: "grafana",
-    name: "Grafana Proxy",
-    area: "Infrastructure",
-    domain: "grafana.takahashiumaru.web.id",
-    domains: ["grafana.takahashiumaru.web.id"],
-    runtime: "Reverse proxy",
-    repo: "Not linked",
-    target: "127.0.0.1:3003",
-    path: "No active runtime",
-    service: "No listener",
-    serviceScope: "system",
-    database: "None",
-    state: "critical",
-    commit: "unavailable",
-    logStreams: ["access", "error"],
-  },
+
   {
     id: "umar-proxy",
     name: "Umar App Proxy",
@@ -357,15 +341,7 @@ export const serviceInventory = [
 
 export const alerts = [
   {
-    severity: "critical",
-    title: "Grafana upstream mengembalikan 502",
-    source: "grafana.takahashiumaru.web.id",
-    age: "Port 3003 offline",
-    detail:
-      "Nginx aktif tetapi tidak ada listener atau service pada 127.0.0.1:3003.",
-  },
-  {
-    severity: "warning",
+    severity: "warning" as "warning" | "critical",
     title: "Beberapa alias domain tidak memiliki DNS",
     source: "DNS inventory",
     age: "Live audit",
@@ -389,7 +365,7 @@ export const deployments = [
     method: "GitHub Actions → atomic Docker release",
     target: "dev-ops-dashboard.service",
     health: "HTTP + database",
-    state: "ready",
+    state: "ready" as "ready" | "mapped" | "blocked",
   },
   {
     project: "Taka FinTrack",
@@ -439,14 +415,7 @@ export const deployments = [
     health: "DNS missing",
     state: "mapped",
   },
-  {
-    project: "Grafana Proxy",
-    environment: "production",
-    method: "Nginx reverse proxy",
-    target: "127.0.0.1:3003",
-    health: "HTTP 502",
-    state: "blocked",
-  },
+
 ] as const;
 
 export const deliveryWorkflowRepositories = [

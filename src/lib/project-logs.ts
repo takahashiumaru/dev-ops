@@ -174,24 +174,7 @@ export const projectLogRegistry: Record<string, ProjectLogTarget> = {
       },
     },
   },
-  grafana: {
-    label: "Grafana Proxy",
-    domain: "grafana.takahashiumaru.web.id",
-    streams: {
-      access: {
-        label: "Nginx access",
-        command: tailFile(
-          "/var/log/nginx/grafana.takahashiumaru.web.id-access.log",
-        ),
-      },
-      error: {
-        label: "Nginx error",
-        command: tailFile(
-          "/var/log/nginx/grafana.takahashiumaru.web.id-error.log",
-        ),
-      },
-    },
-  },
+
   "umar-proxy": {
     label: "Umar App Proxy",
     domain: "umarmarufmutaqin.my.id",
