@@ -2745,13 +2745,14 @@ function TerminalPage({ user }: { user: SessionUser }) {
           import("@xterm/xterm"), import("@xterm/addon-fit"),
         ]);
         if (disposed || !containerRef.current) return;
+        const compactTerminal = window.matchMedia("(max-width: 720px)").matches;
         const terminal = new Terminal({
           cursorBlink: true,
           cursorStyle: "bar",
           convertEol: false,
           fontFamily: "var(--font-geist-mono), monospace",
-          fontSize: 13,
-          lineHeight: 1.35,
+          fontSize: compactTerminal ? 10 : 13,
+          lineHeight: compactTerminal ? 1.22 : 1.35,
           scrollback: 5000,
           theme: {
             background: "#08101d", foreground: "#d9e6f7", cursor: "#60a5fa",
@@ -2763,7 +2764,13 @@ function TerminalPage({ user }: { user: SessionUser }) {
         const fit = new FitAddon();
         terminal.loadAddon(fit);
         terminal.open(containerRef.current);
-        fit.fit();
+        const fitTerminal = () => {
+          fit.fit();
+          if (compactTerminal && terminal.rows > 8) {
+            terminal.resize(terminal.cols, terminal.rows - 1);
+          }
+        };
+        fitTerminal();
         terminalRef.current = terminal;
         fitRef.current = fit;
         terminal.writeln("\x1b[38;5;75mConnecting to primary VPS…\x1b[0m");
@@ -2806,7 +2813,7 @@ function TerminalPage({ user }: { user: SessionUser }) {
           }, 24);
         });
         terminal.onResize(({ cols, rows }) => void send({ action: "resize", cols, rows }));
-        resizeObserver = new ResizeObserver(() => fit.fit());
+        resizeObserver = new ResizeObserver(fitTerminal);
         resizeObserver.observe(containerRef.current);
         terminal.focus();
       } catch (caught) {
