@@ -64,10 +64,67 @@ type MetricRow = RowDataPacket & {
   captured_at: Date;
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getSessionUser();
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const range = searchParams.get("range") || "recent";
+
+  let metricQuery = "";
+  if (range === "day") {
+    metricQuery = `
+      SELECT CAST(AVG(cpu_percent) AS DOUBLE) AS cpu_percent,
+             CAST(AVG(memory_percent) AS DOUBLE) AS memory_percent,
+             CAST(AVG(swap_percent) AS DOUBLE) AS swap_percent,
+             CAST(AVG(disk_percent) AS DOUBLE) AS disk_percent,
+             CAST(AVG(load_1m) AS DOUBLE) AS load_1m,
+             MIN(captured_at) AS captured_at
+      FROM server_metric_snapshots
+      WHERE captured_at >= UTC_TIMESTAMP() - INTERVAL 1 DAY
+      GROUP BY FLOOR(UNIX_TIMESTAMP(captured_at) / 900)
+      ORDER BY captured_at ASC
+    `;
+  } else if (range === "week") {
+    metricQuery = `
+      SELECT CAST(AVG(cpu_percent) AS DOUBLE) AS cpu_percent,
+             CAST(AVG(memory_percent) AS DOUBLE) AS memory_percent,
+             CAST(AVG(swap_percent) AS DOUBLE) AS swap_percent,
+             CAST(AVG(disk_percent) AS DOUBLE) AS disk_percent,
+             CAST(AVG(load_1m) AS DOUBLE) AS load_1m,
+             MIN(captured_at) AS captured_at
+      FROM server_metric_snapshots
+      WHERE captured_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY
+      GROUP BY FLOOR(UNIX_TIMESTAMP(captured_at) / 7200)
+      ORDER BY captured_at ASC
+    `;
+  } else if (range === "month") {
+    metricQuery = `
+      SELECT CAST(AVG(cpu_percent) AS DOUBLE) AS cpu_percent,
+             CAST(AVG(memory_percent) AS DOUBLE) AS memory_percent,
+             CAST(AVG(swap_percent) AS DOUBLE) AS swap_percent,
+             CAST(AVG(disk_percent) AS DOUBLE) AS disk_percent,
+             CAST(AVG(load_1m) AS DOUBLE) AS load_1m,
+             MIN(captured_at) AS captured_at
+      FROM server_metric_snapshots
+      WHERE captured_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY
+      GROUP BY FLOOR(UNIX_TIMESTAMP(captured_at) / 28800)
+      ORDER BY captured_at ASC
+    `;
+  } else {
+    // default: recent
+    metricQuery = `
+      SELECT cpu_percent, memory_percent, swap_percent, disk_percent, load_1m, captured_at
+      FROM (
+        SELECT cpu_percent, memory_percent, swap_percent, disk_percent, load_1m, captured_at
+        FROM server_metric_snapshots
+        ORDER BY captured_at DESC
+        LIMIT 96
+      ) recent_samples
+      ORDER BY captured_at ASC
+    `;
+  }
 
   try {
     const [repositories, workflowRuns, syncs, metricHistory, auditLog] =
@@ -88,16 +145,7 @@ export async function GET() {
           `SELECT status, items_synced, message, started_at, finished_at
          FROM integration_syncs WHERE integration = 'github' ORDER BY started_at DESC LIMIT 8`,
         ),
-        queryRows<MetricRow>(
-          `SELECT cpu_percent, memory_percent, swap_percent, disk_percent, load_1m, captured_at
-         FROM (
-           SELECT cpu_percent, memory_percent, swap_percent, disk_percent, load_1m, captured_at
-           FROM server_metric_snapshots
-           ORDER BY captured_at DESC
-           LIMIT 96
-         ) recent_samples
-         ORDER BY captured_at ASC`,
-        ),
+        queryRows<MetricRow>(metricQuery),
         queryRows<AuditRow>(
           `SELECT id, user_name, user_role, action_name, target_type, target_name,
                   status, message, started_at, finished_at

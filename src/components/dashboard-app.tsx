@@ -770,7 +770,7 @@ function TelemetryChart({
               return (
                 <g key={tick}>
                   <line
-                     className="telemetry-grid-line"
+                    className="telemetry-grid-line"
                     x1="0"
                     x2={width}
                     y1={y}
@@ -778,6 +778,35 @@ function TelemetryChart({
                   />
                   <text className="telemetry-axis-label" x="4" y={y - 5}>
                     {tick}%
+                  </text>
+                </g>
+              );
+            })}
+            {samples.length > 1 && [0, Math.floor(samples.length / 3), Math.floor((2 * samples.length) / 3), samples.length - 1].map((index) => {
+              const sample = samples[index];
+              if (!sample) return null;
+              const x = pointX(index);
+              const date = new Date(sample.captured_at);
+              const timeStr = date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+              const dateStr = date.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+              const label = `${dateStr} ${timeStr}`;
+              return (
+                <g key={index}>
+                  <line
+                    className="telemetry-grid-line"
+                    x1={x}
+                    x2={x}
+                    y1={top}
+                    y2={height - bottom}
+                    style={{ strokeDasharray: "2 2", opacity: 0.2 }}
+                  />
+                  <text
+                    className="telemetry-axis-label"
+                    x={x}
+                    y={height - 10}
+                    textAnchor={index === 0 ? "start" : index === samples.length - 1 ? "end" : "middle"}
+                  >
+                    {label}
                   </text>
                 </g>
               );
@@ -855,12 +884,16 @@ function TacticalOverviewPage({
   liveError,
   onNavigate,
   onOpenLogs,
+  metricRange,
+  setMetricRange,
 }: {
   data: DashboardData | null;
   live: LiveData | null;
   liveError: string;
   onNavigate: (page: ModuleName) => void;
   onOpenLogs: (projectId: string) => void;
+  metricRange: "recent" | "day" | "week" | "month";
+  setMetricRange: (range: "recent" | "day" | "week" | "month") => void;
 }) {
   const repositories = new Map(
     (data?.repositories ?? []).map((repo) => [repo.full_name, repo]),
@@ -990,7 +1023,30 @@ function TacticalOverviewPage({
               <h2>RESOURCE HISTORY</h2>
             </div>
             <div className="range-switch">
-              <button className="active">RECENT</button>
+              <button
+                className={metricRange === "recent" ? "active" : ""}
+                onClick={() => setMetricRange("recent")}
+              >
+                RECENT
+              </button>
+              <button
+                className={metricRange === "day" ? "active" : ""}
+                onClick={() => setMetricRange("day")}
+              >
+                DAY
+              </button>
+              <button
+                className={metricRange === "week" ? "active" : ""}
+                onClick={() => setMetricRange("week")}
+              >
+                WEEK
+              </button>
+              <button
+                className={metricRange === "month" ? "active" : ""}
+                onClick={() => setMetricRange("month")}
+              >
+                MONTH
+              </button>
               <button onClick={() => onNavigate("Servers")}>DETAIL</button>
             </div>
           </header>
@@ -3046,6 +3102,7 @@ export function DashboardApp() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [eventRailOpen, setEventRailOpen] = useState(false);
   const [themeReady, setThemeReady] = useState(false);
+  const [metricRange, setMetricRange] = useState<"recent" | "day" | "week" | "month">("recent");
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof document === "undefined") return "light";
     return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
@@ -3093,7 +3150,7 @@ export function DashboardApp() {
     const timeout = window.setTimeout(() => controller.abort(), 20_000);
     setDataLoading(true);
     try {
-      const response = await fetch("/api/dashboard", {
+      const response = await fetch(`/api/dashboard?range=${metricRange}`, {
         cache: "no-store",
         signal: controller.signal,
       });
@@ -3114,7 +3171,7 @@ export function DashboardApp() {
         setDataLoading(false);
       }
     }
-  }, []);
+  }, [metricRange]);
 
   const loadLive = useCallback(async () => {
     if (liveRequest.current || document.hidden) return;
@@ -3389,6 +3446,8 @@ export function DashboardApp() {
         liveError={liveError}
         onNavigate={navigate}
         onOpenLogs={openProjectLogs}
+        metricRange={metricRange}
+        setMetricRange={setMetricRange}
       />
     );
   } else if (active === "Servers") {
@@ -3540,9 +3599,6 @@ export function DashboardApp() {
         </div>
         <div className="sidebar-footer">
           <div>
-            <span className="avatar small">
-              {user.name.slice(0, 2).toUpperCase()}
-            </span>
             <div>
               <strong>{user.name}</strong>
               <small>{user.role}</small>
@@ -3609,9 +3665,6 @@ export function DashboardApp() {
               <Bell />
               {alerts.length ? <b className="notification-count">{alerts.length}</b> : null}
             </button>
-            <span className="avatar small">
-              {user.name.slice(0, 2).toUpperCase()}
-            </span>
           </div>
         </header>
         <div className="workspace-content">
