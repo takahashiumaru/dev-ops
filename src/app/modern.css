@@ -126,7 +126,7 @@ select:focus-visible {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 244px minmax(0, 1fr);
+  grid-template-columns: 244px minmax(0, 1fr) 306px;
   gap: 12px;
   min-height: 100dvh;
   padding: 12px;
@@ -135,15 +135,7 @@ select:focus-visible {
   z-index: 1;
 }
 
-.app-shell.has-rail {
-  grid-template-columns: 244px minmax(0, 1fr) 306px;
-}
-
 .app-shell.sidebar-collapsed {
-  grid-template-columns: 72px minmax(0, 1fr);
-}
-
-.app-shell.sidebar-collapsed.has-rail {
   grid-template-columns: 72px minmax(0, 1fr) 306px;
 }
 
@@ -323,17 +315,26 @@ i.online,
 }
 
 .nav-group button.active {
-  background: var(--panel-2) !important;
-  color: var(--text) !important;
-  box-shadow: none;
-  border-left: 3px solid var(--accent) !important;
-  padding-left: 7px;
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  box-shadow: none !important;
+  border-left: 3px solid #3b82f6 !important;
+  padding-left: 7px !important;
+}
+
+.nav-group button.active svg {
+  color: #3b82f6 !important;
 }
 
 [data-theme="dark"] .nav-group button.active {
-  background: var(--panel-2) !important;
-  border-left-color: var(--text) !important;
-  box-shadow: none;
+  background: rgba(59, 130, 246, 0.08) !important;
+  color: #3b82f6 !important;
+  border-left-color: #3b82f6 !important;
+  box-shadow: none !important;
+}
+
+[data-theme="dark"] .nav-group button.active svg {
+  color: #3b82f6 !important;
 }
 
 .nav-group button.active::before {
@@ -1831,7 +1832,24 @@ i.online,
 
 .repo-list button:hover,
 .repo-list button.selected {
-  background: var(--panel-2);
+  background: var(--accent-soft) !important;
+  box-shadow: inset 3px 0 var(--accent) !important;
+}
+
+[data-theme="dark"] .repo-list button:hover,
+[data-theme="dark"] .repo-list button.selected {
+  background: var(--panel-2) !important;
+  box-shadow: inset 3px 0 var(--line-strong) !important;
+}
+
+.repo-list button:hover strong,
+.workflow-table a:hover strong {
+  color: var(--accent) !important;
+}
+
+[data-theme="dark"] .repo-list button:hover strong,
+[data-theme="dark"] .workflow-table a:hover strong {
+  color: var(--text) !important;
 }
 
 .repo-icon,
@@ -2893,25 +2911,25 @@ i.online,
 /* Opsdeck identity + quiet navigation treatment */
 :root,
 :root[data-theme="light"] {
-  --ops-ink: #14243d;
-  --ops-orange: #f36b21;
-  --ops-blue: #3478e5;
-  --ops-sky: #dceeff;
-  --ops-sidebar: #f2f8ff;
-  --ops-sidebar-line: #d7e8fb;
-  --ops-sidebar-hover: #e7f2ff;
-  --ops-sidebar-active: #d7eaff;
+  --ops-ink: #0f172a;
+  --ops-orange: #3b82f6;
+  --ops-blue: #2563eb;
+  --ops-sky: #eff6ff;
+  --ops-sidebar: #ffffff;
+  --ops-sidebar-line: #e2e8f0;
+  --ops-sidebar-hover: #f8fafc;
+  --ops-sidebar-active: #e8f2ff;
 }
 
 :root[data-theme="dark"] {
-  --ops-ink: #e8eef8;
-  --ops-orange: #ff8a4c;
-  --ops-blue: #6ea4ff;
-  --ops-sky: #1a3558;
-  --ops-sidebar: #10141d;
-  --ops-sidebar-line: #202938;
-  --ops-sidebar-hover: #171e2a;
-  --ops-sidebar-active: #1a2638;
+  --ops-ink: #eef0f6;
+  --ops-orange: #3b82f6;
+  --ops-blue: #3b82f6;
+  --ops-sky: #181c2e;
+  --ops-sidebar: #0f111a;
+  --ops-sidebar-line: #1e2338;
+  --ops-sidebar-hover: #141724;
+  --ops-sidebar-active: rgba(59, 130, 246, 0.14);
 }
 
 .app-shell {
@@ -3022,15 +3040,15 @@ i.online,
 
 .nav-group button.active,
 [data-theme="dark"] .nav-group button.active {
-  border-left: 2px solid var(--ops-blue) !important;
-  padding-left: 9px;
+  border-left: 3px solid var(--ops-blue) !important;
+  padding-left: 9px !important;
   background: var(--ops-sidebar-active) !important;
-  color: var(--ops-ink) !important;
-  box-shadow: none;
+  color: var(--ops-blue) !important;
+  box-shadow: none !important;
   font-weight: 650;
 }
 
-.nav-group button.active svg { color: var(--ops-orange); }
+.nav-group button.active svg { color: var(--ops-blue) !important; }
 .nav-group button b { border: 0; background: transparent; color: var(--red); }
 
 .sidebar-recent {
@@ -3354,9 +3372,8 @@ i.online,
   border-top: 0 !important;
 }
 
-.nav-group button,
-.nav-group button.active,
-[data-theme="dark"] .nav-group button.active {
+/* Base nav button — inactive only */
+.nav-group button {
   min-height: 46px !important;
   margin: 0 0 4px !important;
   border: 0 !important;
@@ -3375,22 +3392,48 @@ i.online,
   color: var(--ops-ink) !important;
 }
 
+/* Active nav button — blue highlight for BOTH desktop and mobile */
+.nav-group button.active,
+.nav-group button[aria-current="page"],
 .sidebar .nav-group button.active,
 .sidebar .nav-group button[aria-current="page"],
+[data-theme="dark"] .nav-group button.active,
+[data-theme="dark"] .nav-group button[aria-current="page"],
 [data-theme="dark"] .sidebar .nav-group button.active,
 [data-theme="dark"] .sidebar .nav-group button[aria-current="page"] {
-  background: var(--ops-sidebar-active) !important;
-  outline: 1px solid rgba(52, 120, 229, .18) !important;
-  outline-offset: -1px !important;
+  border-left: 0 !important;
+  padding-left: 12px !important;
+  background-color: var(--ops-sidebar-active) !important;
+  background-image: none !important;
   color: var(--ops-blue) !important;
   font-weight: 700 !important;
+  box-shadow: inset 3px 0 0 var(--ops-blue) !important;
 }
 
+/* Keep the exact same active treatment in the desktop icon rail and mobile drawer. */
+.app-shell.sidebar-collapsed .sidebar .nav-group button:is(.active, [aria-current="page"]) {
+  background-color: var(--ops-sidebar-active) !important;
+  color: var(--ops-blue) !important;
+  box-shadow: inset 3px 0 0 var(--ops-blue) !important;
+}
+
+@media (max-width: 1200px) {
+  .sidebar.open .nav-group button:is(.active, [aria-current="page"]) {
+    background-color: var(--ops-sidebar-active) !important;
+    color: var(--ops-blue) !important;
+    box-shadow: inset 3px 0 0 var(--ops-blue) !important;
+  }
+}
+
+.nav-group button.active svg,
+.nav-group button[aria-current="page"] svg,
 .sidebar .nav-group button.active svg,
 .sidebar .nav-group button[aria-current="page"] svg {
-  color: var(--ops-orange) !important;
+  color: var(--ops-blue) !important;
 }
 
+.nav-group button.active::before,
+.nav-group button[aria-current="page"]::before,
 .sidebar .nav-group button.active::before,
 .sidebar .nav-group button[aria-current="page"]::before {
   display: none !important;
@@ -3410,4 +3453,13 @@ i.online,
   font-weight: 800 !important;
   line-height: 23px !important;
   text-align: center !important;
+}
+
+nextjs-portal,
+#nextjs-dev-toolbar,
+[id^="nextjs-dev-toolbar"] {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }

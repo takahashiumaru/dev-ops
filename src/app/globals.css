@@ -259,21 +259,16 @@ i.online,
   color: var(--text);
 }
 .nav-group button.active {
-  border-color: var(--line-strong);
-  background: #0b0c0b;
-  color: var(--text);
+  border-color: transparent;
+  background: #eff6ff;
+  color: #2563eb;
 }
 .nav-group button.active::before {
-  position: absolute;
-  right: 8px;
-  width: 7px;
-  height: 7px;
-  background: var(--orange);
-  content: "";
-  box-shadow: 0 0 8px rgba(255, 122, 0, 0.35);
+  display: none;
+  content: none;
 }
 .nav-group button.active svg {
-  color: var(--orange);
+  color: #3b82f6;
 }
 .nav-group button b {
   margin-left: auto;
