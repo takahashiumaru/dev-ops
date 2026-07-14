@@ -9,7 +9,15 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  /* Keep the sidebar scrollable without showing a visual scrollbar. */
+  scrollbar-width: none;
   touch-action: pan-y;
+}
+
+.sidebar nav::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @media (max-width: 1200px) {
@@ -30,7 +38,7 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     contain: layout paint style;
-    scrollbar-width: thin;
+    scrollbar-width: none;
   }
 
   .sidebar-scrim {
