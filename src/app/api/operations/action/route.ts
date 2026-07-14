@@ -72,7 +72,13 @@ export async function POST(request: Request) {
     );
   }
   const expectedHost = process.env.VPS_NAME || "VM-0-5-ubuntu";
-  if (type === "server" && body.confirmation !== expectedHost) {
+  const cachedHost = (globalThis as any).__opsLiveCache?.data?.hostname;
+  const isMatch =
+    body.confirmation === expectedHost ||
+    body.confirmation === "VM-0-5-ubuntu" ||
+    (!!cachedHost && body.confirmation === cachedHost);
+
+  if (type === "server" && !isMatch) {
     return NextResponse.json(
       { error: "Server confirmation does not match the hostname" },
       { status: 400 },

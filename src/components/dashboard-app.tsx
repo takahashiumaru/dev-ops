@@ -2748,11 +2748,18 @@ function TerminalPage({ user }: { user: SessionUser }) {
         ]);
         if (disposed || !containerRef.current) return;
         const compactTerminal = window.matchMedia("(max-width: 720px)").matches;
+        const computedFont = typeof window !== "undefined"
+          ? getComputedStyle(document.documentElement).getPropertyValue("--font-geist-mono")
+          : "";
+        const resolvedFontFamily = computedFont
+          ? `${computedFont}, "SF Mono", Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace`
+          : '"Geist Mono", "SF Mono", Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace';
+
         const terminal = new Terminal({
           cursorBlink: true,
           cursorStyle: "bar",
           convertEol: false,
-          fontFamily: "var(--font-geist-mono), monospace",
+          fontFamily: resolvedFontFamily,
           fontSize: compactTerminal ? 10 : 13,
           lineHeight: compactTerminal ? 1.22 : 1.35,
           scrollback: 5000,
