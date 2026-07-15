@@ -10,7 +10,7 @@ WorkingDirectory=/home/ubuntu/dev-ops-dashboard/current
 Environment=NODE_ENV=production
 Environment=NEXT_TELEMETRY_DISABLED=1
 ExecStartPre=/bin/sh -c '/usr/bin/docker rm -f dev-ops-dashboard >/dev/null 2>&1 || true'
-ExecStart=/usr/bin/docker run --rm --name dev-ops-dashboard --network host --user 1000:1000 --env-file /home/ubuntu/dev-ops-dashboard/.env -e NODE_ENV=production -e NEXT_TELEMETRY_DISABLED=1 -e NODE_OPTIONS=--max-old-space-size=512 -v /home/ubuntu/dev-ops-dashboard/current:/app -w /app node:20-bookworm-slim node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3005
+ExecStart=/usr/bin/docker run --rm --name dev-ops-dashboard --network host --user 1000:1000 --env-file /home/ubuntu/dev-ops-dashboard/.env -e NODE_ENV=production -e NEXT_TELEMETRY_DISABLED=1 -e NODE_OPTIONS=--max-old-space-size=512 -v /home/ubuntu/dev-ops-dashboard/current:/app -w /app node:24-bookworm-slim node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3005
 ExecStop=/usr/bin/docker stop --timeout 20 dev-ops-dashboard
 SuccessExitStatus=143
 Restart=always
