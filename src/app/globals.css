@@ -821,7 +821,7 @@ i.online,
   opacity: 1;
   border-color: var(--text);
   background: var(--text);
-  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.12);
+  box-shadow: none;
 }
 .chart-series-toggle.active.cpu { color: #ff7a18; border-color: #ff7a18; }
 .chart-series-toggle.active.memory { color: #08a8c7; border-color: #08a8c7; }
@@ -834,6 +834,9 @@ i.online,
 .chart-stage svg:focus-visible {
   outline: 2px solid var(--cyan);
   outline-offset: 2px;
+}
+.chart-stage svg:focus-visible {
+  outline: none;
 }
 .chart-legend .sample-count {
   margin-left: auto;
@@ -934,7 +937,7 @@ i.online,
 .telemetry-focus.memory { stroke: var(--cyan); }
 .telemetry-focus.disk { stroke: var(--purple); }
 .telemetry-hover-band {
-  fill: color-mix(in srgb, var(--cyan) 7%, transparent);
+  display: none;
   pointer-events: none;
 }
 .telemetry-tooltip {
