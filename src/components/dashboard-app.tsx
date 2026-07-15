@@ -761,7 +761,7 @@ function TelemetryChart({
       : [];
   const svgId = useId().replace(/:/g, "");
   const [hovered, setHovered] = useState<number | null>(null);
-  const [selectedMetric, setSelectedMetric] = useState<MetricKey>("memory_percent");
+  const [selectedMetric, setSelectedMetric] = useState<MetricKey | "all">("all");
   const width = 860;
   const height = 238;
   const top = 14;
@@ -798,8 +798,9 @@ function TelemetryChart({
     setHovered(Math.round(ratio * (samples.length - 1)));
   }
 
-  const activeSeries = TELEMETRY_SERIES.find((series) => series.key === selectedMetric) ?? TELEMETRY_SERIES[1];
-  const activeValue = Number(latestSample?.[selectedMetric] ?? 0);
+  const activeSeries = TELEMETRY_SERIES.find((series) => series.key === selectedMetric) ?? null;
+  const plottedSeries = activeSeries ? [activeSeries] : TELEMETRY_SERIES;
+  const activeValue = activeSeries ? Number(latestSample?.[activeSeries.key] ?? 0) : null;
 
   function inspectWithKeyboard(event: React.KeyboardEvent<SVGSVGElement>) {
     if (!samples.length) return;
@@ -828,10 +829,10 @@ function TelemetryChart({
           <button
             key={series.key}
             type="button"
-            className={`chart-series-toggle ${series.className} ${selectedMetric === series.key ? "active" : ""}`}
+            className={`chart-series-toggle ${series.className} ${selectedMetric === series.key || selectedMetric === "all" ? "active" : ""}`}
             aria-label={`Show ${series.label} series`}
-            aria-pressed={selectedMetric === series.key}
-            onClick={() => setSelectedMetric(series.key)}
+            aria-pressed={selectedMetric === series.key || selectedMetric === "all"}
+            onClick={() => setSelectedMetric((current) => current === series.key ? "all" : series.key)}
           >
             <i aria-hidden="true" />
             <span>{series.label}</span>
@@ -842,11 +843,14 @@ function TelemetryChart({
       </div>
       {samples.length ? (
         <div className="chart-stage">
-          <div className={`chart-summary ${activeSeries.className}`}>
-            <div>
-              <span>{activeSeries.label} utilization</span>
-              <strong>{activeValue.toFixed(1)}%</strong>
-            </div>
+          <div className={`chart-summary ${activeSeries?.className ?? "all"}`}>
+            {activeSeries ? (
+              <div className="chart-summary-focus"><span>{activeSeries.label} utilization</span><strong>{activeValue?.toFixed(1)}%</strong></div>
+            ) : (
+              <div className="chart-summary-metrics">
+                {TELEMETRY_SERIES.map((series) => <div key={series.key} className={series.className}><span>{series.label}</span><strong>{Number(latestSample?.[series.key] ?? 0).toFixed(1)}%</strong></div>)}
+              </div>
+            )}
             <small>{samples.length > 1 ? "Live resource trend" : "Latest sample"}</small>
           </div>
           <svg
@@ -926,15 +930,10 @@ function TelemetryChart({
               );
             })}
               <g clipPath={`url(#${svgId}-plot)`}>
-                  <polygon
-                    className={`telemetry-area ${activeSeries.className}`}
-                    points={areaPoints(selectedMetric)}
-                    style={{ fill: `url(#${svgId}-${activeSeries.className}-area)` }}
-                  />
-                  <polyline
-                    className={`telemetry-line ${activeSeries.className}`}
-                    points={linePoints(selectedMetric)}
-                  />
+                {plottedSeries.map((series) => <g key={series.key}>
+                  <polygon className={`telemetry-area ${series.className}`} points={areaPoints(series.key)} style={{ fill: `url(#${svgId}-${series.className}-area)` }} />
+                  <polyline className={`telemetry-line ${series.className}`} points={linePoints(series.key)} />
+                </g>)}
               </g>
             {hovered !== null && activeSample ? (
               <>
@@ -946,12 +945,7 @@ function TelemetryChart({
                   y2={height - bottom}
                 />
                 <rect className="telemetry-hover-band" x={activeX - 18} y={top} width="36" height={chartHeight} rx="10" />
-                <circle
-                  className={`telemetry-focus ${activeSeries.className}`}
-                  cx={activeX}
-                  cy={pointY(activeSample[selectedMetric])}
-                  r="4.5"
-                />
+                {plottedSeries.map((series) => <circle key={series.key} className={`telemetry-focus ${series.className}`} cx={activeX} cy={pointY(activeSample[series.key])} r="4.5" />)}
               </>
             ) : null}
           </svg>
@@ -965,10 +959,7 @@ function TelemetryChart({
               <time>
                 {new Date(activeSample.captured_at).toLocaleString("id-ID")}
               </time>
-              <span>
-                <i className={activeSeries.className} />
-                {activeSeries.label} <b>{Number(activeSample[selectedMetric] ?? 0).toFixed(1)}%</b>
-              </span>
+              {plottedSeries.map((series) => <span key={series.key}><i className={series.className} />{series.label} <b>{Number(activeSample[series.key] ?? 0).toFixed(1)}%</b></span>)}
             </div>
           ) : null}
         </div>

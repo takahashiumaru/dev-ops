@@ -1363,6 +1363,10 @@ i.online,
   font-size: clamp(28px, 3vw, 38px);
 }
 
+.chart-summary-metrics strong {
+  font-size: clamp(20px, 2vw, 28px);
+}
+
 .chart-summary.memory strong { color: var(--cyan); }
 .chart-summary.cpu strong { color: var(--orange); }
 .chart-summary.disk strong { color: var(--purple); }

@@ -855,6 +855,19 @@ i.online,
   display: grid;
   gap: 3px;
 }
+.chart-summary-metrics {
+  display: flex !important;
+  gap: clamp(18px, 4vw, 52px) !important;
+}
+.chart-summary-metrics > div {
+  min-width: 92px;
+}
+.chart-summary-metrics strong {
+  font-size: 24px;
+}
+.chart-summary-metrics .cpu strong { color: var(--orange); }
+.chart-summary-metrics .memory strong { color: var(--cyan); }
+.chart-summary-metrics .disk strong { color: var(--purple); }
 .chart-summary span {
   color: var(--muted);
   font: 600 10px var(--condensed);
