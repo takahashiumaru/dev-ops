@@ -4,6 +4,7 @@ import {
   FormEvent,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -714,6 +715,29 @@ function OverviewPage({
   );
 }
 
+type MetricKey = "cpu_percent" | "memory_percent" | "disk_percent";
+
+const TELEMETRY_SERIES: Array<{
+  key: MetricKey;
+  label: string;
+  shortLabel: string;
+  className: "cpu" | "memory" | "disk";
+}> = [
+  { key: "cpu_percent", label: "CPU", shortLabel: "CPU", className: "cpu" },
+  {
+    key: "memory_percent",
+    label: "Memory",
+    shortLabel: "MEM",
+    className: "memory",
+  },
+  {
+    key: "disk_percent",
+    label: "Root disk",
+    shortLabel: "DISK",
+    className: "disk",
+  },
+];
+
 function TelemetryChart({
   history,
   live,
@@ -735,7 +759,13 @@ function TelemetryChart({
           },
         ]
       : [];
+  const svgId = useId().replace(/:/g, "");
   const [hovered, setHovered] = useState<number | null>(null);
+  const [visibleSeries, setVisibleSeries] = useState<Record<MetricKey, boolean>>({
+    cpu_percent: true,
+    memory_percent: true,
+    disk_percent: true,
+  });
   const width = 860;
   const height = 238;
   const top = 14;
@@ -747,15 +777,23 @@ function TelemetryChart({
     top +
     chartHeight -
     (Math.max(0, Math.min(100, Number(value ?? 0))) / 100) * chartHeight;
-  const points = (key: "cpu_percent" | "memory_percent" | "disk_percent") =>
+  const linePoints = (key: MetricKey) =>
     samples
       .map((sample, index) => `${pointX(index)},${pointY(sample[key])}`)
       .join(" ");
+  const areaPoints = (key: MetricKey) => {
+    if (!samples.length) return "";
+    const baseline = height - bottom;
+    const firstX = pointX(0);
+    const lastX = pointX(samples.length - 1);
+    return `${firstX},${baseline} ${linePoints(key)} ${lastX},${baseline}`;
+  };
   const activeSample = hovered !== null ? samples[hovered] : null;
   const activeX = hovered !== null ? pointX(hovered) : 0;
+  const latestSample = samples.at(-1);
 
   function moveCursor(event: React.MouseEvent<SVGSVGElement>) {
-    if (samples.length < 2) return;
+    if (!samples.length) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const ratio = Math.max(
       0,
@@ -764,12 +802,55 @@ function TelemetryChart({
     setHovered(Math.round(ratio * (samples.length - 1)));
   }
 
+  function toggleSeries(key: MetricKey) {
+    setVisibleSeries((current) => {
+      if (
+        current[key] &&
+        Object.values(current).filter(Boolean).length === 1
+      ) {
+        return current;
+      }
+      return { ...current, [key]: !current[key] };
+    });
+  }
+
+  function inspectWithKeyboard(event: React.KeyboardEvent<SVGSVGElement>) {
+    if (!samples.length) return;
+    const current = hovered ?? samples.length - 1;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setHovered(Math.max(0, current - 1));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setHovered(Math.min(samples.length - 1, current + 1));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setHovered(0);
+    } else if (event.key === "End" || event.key === "Enter") {
+      event.preventDefault();
+      setHovered(samples.length - 1);
+    } else if (event.key === "Escape") {
+      setHovered(null);
+    }
+  }
+
   return (
     <div className="telemetry-chart-wrap">
       <div className="chart-legend">
-        <span className="cpu">CPU</span>
-        <span className="memory">MEMORY</span>
-        <span className="disk">ROOT DISK</span>
+        {TELEMETRY_SERIES.map((series) => (
+          <button
+            key={series.key}
+            type="button"
+            className={`chart-series-toggle ${series.className}`}
+            aria-label={`${visibleSeries[series.key] ? "Hide" : "Show"} ${series.label} series`}
+            aria-pressed={visibleSeries[series.key]}
+            onClick={() => toggleSeries(series.key)}
+          >
+            <i aria-hidden="true" />
+            <span>{series.label}</span>
+            <strong>{Number(latestSample?.[series.key] ?? 0).toFixed(1)}%</strong>
+          </button>
+        ))}
         <span className="sample-count">{samples.length} STORED SAMPLES</span>
       </div>
       {samples.length ? (
@@ -778,9 +859,32 @@ function TelemetryChart({
             viewBox={`0 0 ${width} ${height}`}
             role="img"
             aria-label="Server resource history"
+            tabIndex={0}
             onMouseMove={moveCursor}
             onMouseLeave={() => setHovered(null)}
+            onFocus={() => setHovered((current) => current ?? samples.length - 1)}
+            onBlur={() => setHovered(null)}
+            onKeyDown={inspectWithKeyboard}
           >
+            <defs>
+              <clipPath id={`${svgId}-plot`}>
+                <rect x="0" y={top} width={width} height={chartHeight} rx="8" />
+              </clipPath>
+              {TELEMETRY_SERIES.map((series) => (
+                <linearGradient
+                  key={series.key}
+                  className={`telemetry-gradient ${series.className}`}
+                  id={`${svgId}-${series.className}-area`}
+                  x1="0"
+                  x2="0"
+                  y1="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                </linearGradient>
+              ))}
+            </defs>
             {[0, 25, 50, 75, 100].map((tick) => {
               const y = pointY(tick);
               return (
@@ -827,18 +931,21 @@ function TelemetryChart({
                 </g>
               );
             })}
-            <polyline
-              className="telemetry-line cpu"
-              points={points("cpu_percent")}
-            />
-            <polyline
-              className="telemetry-line memory"
-              points={points("memory_percent")}
-            />
-            <polyline
-              className="telemetry-line disk"
-              points={points("disk_percent")}
-            />
+            {TELEMETRY_SERIES.map((series) =>
+              visibleSeries[series.key] ? (
+                <g key={series.key} clipPath={`url(#${svgId}-plot)`}>
+                  <polygon
+                    className={`telemetry-area ${series.className}`}
+                    points={areaPoints(series.key)}
+                    style={{ fill: `url(#${svgId}-${series.className}-area)` }}
+                  />
+                  <polyline
+                    className={`telemetry-line ${series.className}`}
+                    points={linePoints(series.key)}
+                  />
+                </g>
+              ) : null,
+            )}
             {hovered !== null && activeSample ? (
               <>
                 <line
@@ -848,12 +955,17 @@ function TelemetryChart({
                   y1={top}
                   y2={height - bottom}
                 />
-                <circle
-                  className="telemetry-focus"
-                  cx={activeX}
-                  cy={pointY(activeSample.cpu_percent)}
-                  r="4"
-                />
+                {TELEMETRY_SERIES.map((series) =>
+                  visibleSeries[series.key] ? (
+                    <circle
+                      key={series.key}
+                      className={`telemetry-focus ${series.className}`}
+                      cx={activeX}
+                      cy={pointY(activeSample[series.key])}
+                      r="4"
+                    />
+                  ) : null,
+                )}
               </>
             ) : null}
           </svg>
@@ -861,25 +973,21 @@ function TelemetryChart({
             <div
               className="telemetry-tooltip"
               style={{
-                left: `${Math.max(8, Math.min(72, (activeX / width) * 100))}%`,
+                left: `${Math.max(12, Math.min(88, (activeX / width) * 100))}%`,
               }}
             >
               <time>
                 {new Date(activeSample.captured_at).toLocaleString("id-ID")}
               </time>
-              <span>
-                <i className="cpu" />
-                CPU <b>{Number(activeSample.cpu_percent ?? 0).toFixed(1)}%</b>
-              </span>
-              <span>
-                <i className="memory" />
-                MEM{" "}
-                <b>{Number(activeSample.memory_percent ?? 0).toFixed(1)}%</b>
-              </span>
-              <span>
-                <i className="disk" />
-                DISK <b>{Number(activeSample.disk_percent ?? 0).toFixed(1)}%</b>
-              </span>
+              {TELEMETRY_SERIES.map((series) =>
+                visibleSeries[series.key] ? (
+                  <span key={series.key}>
+                    <i className={series.className} />
+                    {series.shortLabel}
+                    <b>{Number(activeSample[series.key] ?? 0).toFixed(1)}%</b>
+                  </span>
+                ) : null,
+              )}
             </div>
           ) : null}
         </div>

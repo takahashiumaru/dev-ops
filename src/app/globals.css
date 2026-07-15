@@ -781,28 +781,46 @@ i.online,
 .chart-legend {
   display: flex;
   align-items: center;
-  gap: 17px;
-  min-height: 25px;
+  gap: 8px;
+  min-height: 42px;
   color: var(--muted);
   font: 500 8px var(--mono);
 }
-.chart-legend span::before {
-  display: inline-block;
-  width: 4px;
-  height: 12px;
-  margin-right: 7px;
-  content: "";
-  vertical-align: middle;
+.chart-series-toggle {
+  display: inline-grid;
+  grid-template-columns: 8px auto auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: var(--panel);
+  color: var(--muted);
+  font: 600 8px var(--mono);
+  cursor: pointer;
+}
+.chart-series-toggle i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
   background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 13%, transparent);
 }
-.chart-legend .cpu {
-  color: var(--orange);
+.chart-series-toggle strong {
+  color: var(--text);
+  font-size: 10px;
 }
-.chart-legend .memory {
-  color: var(--cyan);
+.chart-series-toggle.cpu { color: var(--orange); }
+.chart-series-toggle.memory { color: var(--cyan); }
+.chart-series-toggle.disk { color: var(--purple); }
+.chart-series-toggle[aria-pressed="false"] {
+  opacity: 0.46;
 }
-.chart-legend .disk {
-  color: var(--purple);
+.chart-series-toggle:focus-visible,
+.chart-stage svg:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 .chart-legend .sample-count {
   margin-left: auto;
@@ -831,10 +849,16 @@ i.online,
 }
 .telemetry-line {
   fill: none;
-  stroke-width: 2;
-  stroke-linecap: square;
-  stroke-linejoin: miter;
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+}
+.telemetry-gradient.cpu { color: var(--orange); }
+.telemetry-gradient.memory { color: var(--cyan); }
+.telemetry-gradient.disk { color: var(--purple); }
+.telemetry-area {
+  pointer-events: none;
 }
 .telemetry-line.cpu {
   stroke: var(--orange);
@@ -846,15 +870,18 @@ i.online,
   stroke: var(--purple);
 }
 .telemetry-crosshair {
-  stroke: rgba(255, 255, 255, 0.25);
+  stroke: color-mix(in srgb, var(--cyan) 55%, var(--line));
   stroke-width: 1;
-  stroke-dasharray: 3 4;
+  stroke-dasharray: 4 5;
 }
 .telemetry-focus {
   fill: var(--panel);
-  stroke: var(--orange);
-  stroke-width: 2;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
 }
+.telemetry-focus.cpu { stroke: var(--orange); }
+.telemetry-focus.memory { stroke: var(--cyan); }
+.telemetry-focus.disk { stroke: var(--purple); }
 .telemetry-tooltip {
   position: absolute;
   top: 12px;
@@ -865,8 +892,9 @@ i.online,
   border: 1px solid var(--line-strong);
   padding: 9px;
   transform: translateX(-50%);
-  background: #1a1b1a;
-  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.34);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
   font: 400 8px var(--mono);
   pointer-events: none;
 }
@@ -885,6 +913,7 @@ i.online,
   width: 5px;
   height: 5px;
   margin-top: 3px;
+  border-radius: 999px;
 }
 .telemetry-tooltip i.cpu {
   background: var(--orange);
