@@ -912,6 +912,7 @@ i.online,
 .telemetry-gradient.memory { color: var(--cyan); }
 .telemetry-gradient.disk { color: var(--purple); }
 .telemetry-area {
+  display: none;
   pointer-events: none;
 }
 .telemetry-line.cpu {
