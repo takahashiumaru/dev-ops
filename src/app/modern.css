@@ -1319,12 +1319,17 @@ i.online,
 }
 
 .chart-series-toggle.active {
-  border-color: var(--text) !important;
-  background: var(--text) !important;
+  background: color-mix(in srgb, currentColor 10%, var(--panel)) !important;
+  box-shadow: 0 7px 18px color-mix(in srgb, currentColor 18%, transparent);
 }
 
 .chart-series-toggle span {
   color: var(--muted) !important;
+}
+
+.chart-series-toggle.active span,
+.chart-series-toggle.active strong {
+  color: currentColor !important;
 }
 
 .chart-series-toggle strong {

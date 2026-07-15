@@ -821,12 +821,14 @@ i.online,
   opacity: 1;
   border-color: var(--text);
   background: var(--text);
-  color: var(--panel);
   box-shadow: 0 7px 18px rgba(15, 23, 42, 0.12);
 }
+.chart-series-toggle.active.cpu { color: #ff7a18; border-color: #ff7a18; }
+.chart-series-toggle.active.memory { color: #08a8c7; border-color: #08a8c7; }
+.chart-series-toggle.active.disk { color: #625ff0; border-color: #625ff0; }
 .chart-series-toggle.active span,
 .chart-series-toggle.active strong {
-  color: var(--panel);
+  color: currentColor;
 }
 .chart-series-toggle:focus-visible,
 .chart-stage svg:focus-visible {
