@@ -817,6 +817,17 @@ i.online,
 .chart-series-toggle[aria-pressed="false"] {
   opacity: 0.46;
 }
+.chart-series-toggle.active {
+  opacity: 1;
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--panel);
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.12);
+}
+.chart-series-toggle.active span,
+.chart-series-toggle.active strong {
+  color: var(--panel);
+}
 .chart-series-toggle:focus-visible,
 .chart-stage svg:focus-visible {
   outline: 2px solid var(--cyan);
@@ -832,6 +843,31 @@ i.online,
 .chart-stage {
   position: relative;
   min-height: 238px;
+}
+.chart-summary {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 2px 4px 8px;
+}
+.chart-summary div {
+  display: grid;
+  gap: 3px;
+}
+.chart-summary span {
+  color: var(--muted);
+  font: 600 10px var(--condensed);
+  letter-spacing: 0.02em;
+}
+.chart-summary strong {
+  color: var(--text);
+  font: 700 30px/1 var(--condensed);
+  letter-spacing: -0.06em;
+}
+.chart-summary small {
+  color: var(--faint);
+  font: 500 9px var(--mono);
 }
 .chart-stage svg {
   display: block;
@@ -882,6 +918,10 @@ i.online,
 .telemetry-focus.cpu { stroke: var(--orange); }
 .telemetry-focus.memory { stroke: var(--cyan); }
 .telemetry-focus.disk { stroke: var(--purple); }
+.telemetry-hover-band {
+  fill: color-mix(in srgb, var(--cyan) 7%, transparent);
+  pointer-events: none;
+}
 .telemetry-tooltip {
   position: absolute;
   top: 12px;
