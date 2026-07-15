@@ -1320,7 +1320,19 @@ i.online,
 
 .chart-series-toggle.active {
   background: color-mix(in srgb, #7dd3fc 18%, var(--panel)) !important;
-  box-shadow: 0 7px 18px rgba(56, 189, 248, 0.14);
+  box-shadow: none;
+}
+
+.chart-series-toggle.active.cpu {
+  background: color-mix(in srgb, var(--orange) 14%, var(--panel)) !important;
+}
+
+.chart-series-toggle.active.memory {
+  background: color-mix(in srgb, var(--cyan) 14%, var(--panel)) !important;
+}
+
+.chart-series-toggle.active.disk {
+  background: color-mix(in srgb, var(--purple) 14%, var(--panel)) !important;
 }
 
 .chart-series-toggle span {
